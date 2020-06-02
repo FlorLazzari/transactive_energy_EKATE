@@ -81,7 +81,6 @@ library(reshape2)
 df_plot <- melt(data = df_day_1, id.vars = "time", variable.name = "series")
 
 ggplot(df_plot) + geom_line(aes(time,value, color = series)) + 
-  # facet_grid(series ~ ., scales = "free_y") + 
   # facet_wrap(series ~ ., scales = "free_y") +
   theme(legend.position = "none")
 

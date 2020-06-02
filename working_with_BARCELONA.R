@@ -1,25 +1,25 @@
-# filename_1 = "202005081411_charts_compare.csv"
-# filename_2 = "202005081413_charts_compare.csv"
-# 
-# df_1 <- read.csv(file = filename_1, header = TRUE)
-# df_2 <- read.csv(file = filename_2, header = TRUE)
-# 
-# df_1 <- df_1[2:nrow(df_1),]
-# df_2 <- df_2[2:nrow(df_2),]
-# 
-# colnames(df_1) <- c("time", "value")
-# colnames(df_2) <- c("time", "value")
-# 
-# df_1$time <- as.POSIXct(as.character(df_1$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
-# df_2$time <- as.POSIXct(as.character(df_2$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
-# 
-# df_1$value <- as.numeric(as.character(df_1$value))
-# df_2$value <- as.numeric(as.character(df_2$value))
+library(ggplot2)
+
+filename_1 = "202005081411_charts_compare.csv"
+filename_2 = "202005081413_charts_compare.csv"
+
+df_pv_generation_0 <- read.csv(file = filename_1, header = TRUE)
+df_cons_0 <- read.csv(file = filename_2, header = TRUE)
+
+colnames(df_pv_generation_0) <- c("time", "value_pv_gen_0")
+colnames(df_cons_0) <- c("time", "value_0")
+
+df_pv_generation_0$time <- as.POSIXct(as.character(df_pv_generation_0$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
+df_cons_0$time <- as.POSIXct(as.character(df_cons_0$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
+
+# df_pv_generation_0$date <- as.Date(df_pv_generation_0$time)
+# df_cons_0$date <- as.Date(df_cons_0$time)
+
+# df_pv_generation$value <- as.numeric(as.character(df_pv_generation_0$value))
+# df_cons_0$value <- as.numeric(as.character(df_cons_0  $value))
 # 
 # # quick filter
-# df_2$value <- ifelse(df_2$value>2000, NA, df_2$value)
-# 
-# df <- merge(df_1, df_2, by = "time")
+# df_cons_0$value <- ifelse(df_2$value>2000, NA, df_2$value)
 # 
 # library(reshape2)
 # library(ggplot2)
@@ -49,29 +49,41 @@ df_cons_1 <- read.csv(file = filename_cons_1, header = TRUE)
 df_cons_2 <- read.csv(file = filename_cons_2, header = TRUE)
 df_cons_3 <- read.csv(file = filename_cons_3, header = TRUE)
 
-colnames(df_cons_1) <- c("time", "value")
-colnames(df_cons_2) <- c("time", "value")
-colnames(df_cons_3) <- c("time", "value")
+colnames(df_cons_1) <- c("time", "value_1")
+colnames(df_cons_2) <- c("time", "value_2")
+colnames(df_cons_3) <- c("time", "value_3")
 
 df_cons_1$time <- as.POSIXct(as.character(df_cons_1$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
 df_cons_2$time <- as.POSIXct(as.character(df_cons_2$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
 df_cons_3$time <- as.POSIXct(as.character(df_cons_3$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
 
+# df_cons_1$date <- as.Date(df_cons_1$time)
+# df_cons_2$date <- as.Date(df_cons_2$time)
+# df_cons_3$date <- as.Date(df_cons_3$time)
+
 # select only a random day just to start (day 1 had some problems for user 3):
-df_cons_1_day_1 <- df_cons_1[grepl(pattern = "2019-06-01", df$date), ]
-df_cons_2_day_1 <- df_cons_2[grepl(pattern = "2019-06-01", df$date), ]
-df_cons_3_day_1 <- df_cons_3[grepl(pattern = "2019-06-01", df$date), ]
-df_pv_generation <- df$pv_generation[grepl(pattern = "2019-06-01", df$date)]
+df_cons_1_day_1 <- df_cons_1[grepl(pattern = "2019-06-01", df_cons_1$time), ]
+df_cons_2_day_1 <- df_cons_2[grepl(pattern = "2019-06-01", df_cons_2$time), ]
+df_cons_3_day_1 <- df_cons_3[grepl(pattern = "2019-06-01", df_cons_3$time), ]
+df_pv_generation_0_day_1 <- df_pv_generation_0[grepl(pattern = "2019-06-01", df_pv_generation_0$time), ]
+
+
+# df_cons_1_day_1 <- df_cons_1[grepl(pattern = "2019-06-01", df_cons_1$date), ]
+# df_cons_2_day_1 <- df_cons_2[grepl(pattern = "2019-06-01", df_cons_2$date), ]
+# df_cons_3_day_1 <- df_cons_3[grepl(pattern = "2019-06-01", df_cons_3$date), ]
+# df_pv_generation_0_day_1 <- df_pv_generation_0[grepl(pattern = "2019-06-01", df_pv_generation_0$date), ]
 
 df_day_1 <- merge(df_cons_1_day_1, df_cons_2_day_1, by = "time")
 df_day_1 <- merge(df_day_1, df_cons_3_day_1, by = "time")
-df_day_1 <- cbind(df_day_1, df_pv_generation)
+df_day_1 <- merge(df_day_1, df_pv_generation_0_day_1, by = "time")
 
-colnames(df_day_1) <- c("time", "value_1", "value_2", "value_3", "pv_generation")
-
+library(reshape2)
 df_plot <- melt(data = df_day_1, id.vars = "time", variable.name = "series")
 
-ggplot(df_plot) + geom_line(aes(time,value, color = series)) + facet_grid(series ~ ., scales = "free_y") + theme(legend.position = "none")
+ggplot(df_plot) + geom_line(aes(time,value, color = series)) + 
+  # facet_grid(series ~ ., scales = "free_y") + 
+  # facet_wrap(series ~ ., scales = "free_y") +
+  theme(legend.position = "none")
 
 
 

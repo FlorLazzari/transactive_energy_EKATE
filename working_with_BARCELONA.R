@@ -87,15 +87,17 @@ ggplot(df_plot) + geom_line(aes(time,value, color = series)) +
 
 #################################################
 
-library("kmlShape")
+# library("kmlShape")
+library("SimilarityMeasures")
+
 library("dgof")
 library("seewave")
 library("hydroGOF")
 
 # desing of artificial (A) df to understand the coefficients
 
-library(DescTools)
-
+library("DescTools")
+library("pracma")
 
 
 time <- df_day_1$time
@@ -143,55 +145,70 @@ ggplot(df_plot) + geom_line(aes(time,value, color = series)) +
 
 # comparison functions:
 
-fft_pv_generator = fft(z = pv_generator)
-fft_pv_generator_Mod = Mod(fft_pv_generator)
-
 vector_values <- c(1:(ncol(df_day_1_A) - 2))
 df_stats <- data.frame(user = factor(),
-                       frechet_sum = numeric(), 
-                       frechet_max = numeric(), 
+                       frechet_new = numeric(),
+                       # frechet_sum = numeric(), 
+                       # frechet_max = numeric(), 
                        kolm = numeric(), 
                        itakura = numeric(), 
                        correlation = numeric(), 
                        covariance = numeric(), 
                        chi_squared_stat = numeric(), 
                        chi_squared_pval = numeric(), 
-                       mnse = numeric())
+                       mnse = numeric(), 
+                       euc_dist = numeric())
+
+pv_gen <- df_day_1[, grep(pattern = "value_pv_gen_0", x = colnames(df_day_1))]
+fft_pv_gen = fft(z = pv_gen)
+fft_pv_gen_Mod = Mod(fft_pv_gen)
 
 
 # todo:
 for (i in vector_values) {
   # i = 3
   value <- df_day_1_A[, grep(pattern = paste0("value_", i), x = colnames(df_day_1_A))]
-  
   # value <- df_day_1[, grep(pattern = paste0("value_", i), x = colnames(df_day_1))]
-  pv_generation <- df_day_1[, grep(pattern = "value_pv_gen_0", x = colnames(df_day_1))]
-  frechet_sum <- as.numeric(distFrechet(Px = 1:length(pv_generator), Py = pv_generation, Qx = 1:length(pv_generator), Qy = value, FrechetSumOrMax="sum"))
-  frechet_max <- as.numeric(distFrechet(Px = 1:length(pv_generator), Py = pv_generator, Qx = 1:length(pv_generator), Qy = value, FrechetSumOrMax="max"))
-  kolm <- as.numeric(ks.test(x = pv_generation, y = value))[2]
+
+  frechet_new <- as.numeric(Frechet(traj1 = as.matrix(pv_gen), traj2 = as.matrix(value)))
+  
+  # in the notebook I cant install this package                                      
+  # frechet_sum <- as.numeric(distFrechet(Px = 1:length(pv_gen), Py = pv_gen, Qx = 1:length(pv_gen), Qy = value, FrechetSumOrMax="sum"))
+  # frechet_max <- as.numeric(distFrechet(Px = 1:length(pv_gen), Py = pv_gen, Qx = 1:length(pv_gen), Qy = value, FrechetSumOrMax="max"))
+  kolm <- as.numeric(ks.test(x = pv_gen, y = value))[2]
   fft <- fft(z = value)
   fft_Mod <- Mod(fft)
-  itakura <- as.numeric(itakura.dist(fft_pv_generator_Mod, fft_Mod, scale=TRUE))[1]
-  correlation <- as.numeric(cor(x = pv_generator, y = value))
-  covariance <- as.numeric(cov(x = pv_generator, y = value))
-  chi_squared <- chisq.test(x = pv_generator, y = value)
+  # TODO: should understand why I am staying with half of the Fourier transform 
+  # itakura_using_complete_fft <- as.numeric(itakura.dist(fft_pv_gen_Mod, fft_Mod, scale=TRUE))[1]
+  itakura <- as.numeric(itakura.dist(fft_pv_gen_Mod[1:(length(fft_Mod)/2)], fft_Mod[1:(length(fft_Mod)/2)], scale=TRUE))[1]
+  # sig_itakura <- sigmoid(itakura, a = 1, b = 0)
+  # sig_itakura <- sigmoid(itakura, a = 1, b = 100)
+  # itakura <- sig_itakura
+  
+  correlation <- as.numeric(cor(x = pv_gen, y = value))
+  covariance <- as.numeric(cov(x = pv_gen, y = value))
+  chi_squared <- chisq.test(x = pv_gen, y = value)
   chi_squared_stat <- as.numeric(chi_squared$statistic)
   chi_squared_pval <- as.numeric(chi_squared$p.value)
-  mnse <- as.numeric(mNSE(pv_generator, value))
+  mnse <- as.numeric(mNSE(pv_gen, value))
   # TODO:
-  euc_dist <- proxy::dist(x = t(as.matrix(d)),
-                          y = as.matrix(centroids_df[cluster_predicted, 2:25]),1:2,as.numeric))
+  # euc_dist <- proxy::dist(x = t(as.matrix(d)),
+  #                         y = as.matrix(centroids_df[cluster_predicted, 2:25]),1:2,as.numeric)
+  
+  euc_dist <- as.numeric(proxy::dist(x = t(pv_gen), y = t(value)))
   
   df_stats <- rbind(df_stats, data.frame(user = i,
-                                         frechet_sum = frechet_sum, 
-                                         frechet_max = frechet_max,
+                                         frechet_new = frechet_new,
+                                         # frechet_sum = frechet_sum, 
+                                         # frechet_max = frechet_max,
                                          kolm = kolm,
                                          itakura = itakura, 
                                          correlation = correlation,
                                          covariance = covariance, 
                                          chi_squared_stat = chi_squared_stat,
                                          chi_squared_pval = chi_squared_pval, 
-                                         mnse = mnse)
+                                         mnse = mnse, 
+                                         euc_dist = euc_dist)
                    )
 }
 
@@ -213,26 +230,36 @@ library("gridExtra")
 grid.arrange(plot_gen, original_plots_cons, bar_stats, nrow = 1)
 
 
-dates_1 = c(1, 10, 10)
-dates_2 = c(1, 11, 11)
-dates_3 = c(1, 12, 12)
-dates_4 = c(1, 13, 13)
-dates_5 = c(1, 14, 14)
+df_sigmoid_stats <- data.frame()
 
-total_dates = c(dates_1, dates_2, dates_3, dates_4, dates_5)
+for (i in 2:(ncol(df_stats) - 1)) {
 
-results = table(total_dates)
+  aux <- sigmoid(df_stats[, i], a = 1, b = 0)
+  df_sigmoid_stats <- rbind(df_sigmoid_stats, aux) 
 
-ifelse(as.numeric)
+}
 
+df_sigmoid_stats <- t(df_sigmoid_stats)
+rownames(df_sigmoid_stats) <- NULL
 
+colnames(df_sigmoid_stats) <- c("frechet_new", "kolm", "itakura", "corzrelation", "covariance",
+                                "chi_squared_stat", "chi_squared_pval", "mnse", "euc_dist")
 
+df_sigmoid_stats <- cbind(df_sigmoid_stats, data.frame(user = c(1:5)))
 
-# rep("dates_1", times = length(dates_1)), 
-# 
-# df = data.frame("dates_1" = dates_1, 
-#                 "dates_2" = dates_2, 
-#                 "dates_3" = dates_3, 
-#                 "dates_4" = dates_4, 
-#                 "dates_5" = dates_5)
+df_sigmoid_stats <- as.data.frame(df_sigmoid_stats)
+
+df_plot_4 <- melt(data = df_sigmoid_stats, id.vars =  "user")
+df_plot_4$user = as.factor(df_plot_4$user)
+bar_sigmoid_stats <- ggplot(df_plot_4) + 
+  geom_bar(stat = "identity", width = 1, aes(x = variable, y = value, fill = user)) +
+  facet_wrap(facets = "variable", scales = "free")
+
+grid.arrange(original_plots_cons, bar_stats, bar_sigmoid_stats, nrow = 1)
+
+library("rdetools")
+
+# example:
+# d <- sincdata(24, noise = 0.1)
+# K <- rbfkernel(d$X, sigma = 1, Y = d$y)
 

@@ -258,7 +258,7 @@ bar_sigmoid_stats <- ggplot(df_plot_4) +
 grid.arrange(original_plots_cons, bar_stats, bar_sigmoid_stats, nrow = 1)
 
 library("rdetools")
-
+  
 # example:
 # d <- sincdata(24, noise = 0.1)
 # K <- rbfkernel(d$X, sigma = 1, Y = d$y)

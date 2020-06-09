@@ -32,12 +32,15 @@ df_cons_3$time <- as.POSIXct(as.character(df_cons_3$time), format = "%d-%m-%Y %H
 df_cons_1_day_1 <- df_cons_1[grepl(pattern = "2019-06-01", df_cons_1$time), ]
 df_cons_2_day_1 <- df_cons_2[grepl(pattern = "2019-06-01", df_cons_2$time), ]
 df_cons_3_day_1 <- df_cons_3[grepl(pattern = "2019-06-01", df_cons_3$time), ]
+# CHEATING
 df_cons_3_day_1$cons_4 <- df_cons_3_day_1$cons_4*c(0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8,
-                                                   1.8, 1.8, 1.8, 1.8, 1.8, 2.5, 2.5, 2.5, 1.8, 1.8, 1.8, 1.8)
+                                                   1.8, 1.8, 2.7, 2.7, 2.7, 2.7, 2.7, 1.8, 1.8, 1.8, 1.8, 1.8)
 df_pv_generation_0_day_1 <- df_pv_generation_0[grepl(pattern = "2019-06-01", df_pv_generation_0$time), ]
 df_cons_0 <- df_cons_0[grepl(pattern = "2019-06-01", df_cons_0$time), ] 
 # CHEATING
 df_cons_0$cons_1 <- df_cons_0$cons_1 * 0.3
+df_cons_0$cons_1 <- df_cons_0$cons_1*c(1.8, 1.8, 1.8, 1.8, 1.8, 2.7, 2.7, 2.7, 1.8, 1.8, 1.8, 1.8,
+                                       0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
 
 df_day_1 <- merge(df_cons_1_day_1, df_cons_2_day_1, by = "time")
 df_day_1 <- merge(df_day_1, df_cons_3_day_1, by = "time")
@@ -55,13 +58,26 @@ df_day_1 <- merge(df_day_1, df_cons_0, by = "time")
 
 library(reshape2)
 # plot done!
-df_plot <- melt(data = df_day_1, id.vars = "time", variable.name = "series")
+
+# HARDCODED:
+df_day_1_plot <- df_day_1 
+colnames(df_day_1_plot)[2] <- 2 
+colnames(df_day_1_plot)[3] <- 3 
+colnames(df_day_1_plot)[4] <- 4 
+colnames(df_day_1_plot)[5] <- "PV_generation" 
+colnames(df_day_1_plot)[6] <- 1 
+
+df_day_1_plot <- df_day_1_plot[, order(colnames(df_day_1_plot))]
+
+df_plot <- melt(data = df_day_1_plot, id.vars = "time", variable.name = "series")
+
 df_sum <- data.frame("time" = df_day_1$time,
                      "consumption_sum" = rowSums(df_day_1[, c(2, 3, 4, 6)]))
-p <- ggplot() + geom_line(aes(df_plot$time, df_plot$value , color = df_plot$series)) +
-      geom_area(aes(x = df_sum$time, y = df_sum$consumption_sum), alpha = 0.5)
+p <- ggplot() + geom_line(aes(hour(df_plot$time), df_plot$value , color = df_plot$series)) +
+      geom_area(aes(x = hour(df_sum$time), y = df_sum$consumption_sum), alpha = 0.5) +
+      labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
 
-ggsave(filename = "all_users.pdf", plot = p, width = 10)
+ggsave(filename = "electrical_generation_and_consumption.pdf", plot = p, width = 10)
 
 surplus_all_users <- ifelse(df_pv_generation_0_day_1$gen_0 - df_sum$consumption_sum >= 0, df_pv_generation_0_day_1$gen_0 - df_sum$consumption_sum, 0)
 sum(surplus_all_users)
@@ -145,9 +161,13 @@ df_consumption_optimum_combination <- df_day_1[, grep(pattern = paste0(vector_na
 # To calculate the coefficients it is important to remember that the only users that should
 # be taken into account are the ones that have been selected
 df_surplus_only_users <- df_surplus[, !(grepl(pattern = "time", x = colnames(df_surplus)))]
-df_surplus_total <- rowSums(df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))])
-static_coefficients_hourly <- 1 - df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))]/df_surplus_total
+df_sum_surplus <- rowSums(df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))])
+# df_surplus_total_aux <- generation - rowSums(df_day_1[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_day_1))])
+# df_surplus_total <- ifelse(df_surplus_total_aux >= 0 , df_surplus_total_aux, 0 )
+static_coefficients_hourly <- 1 - df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))]/df_sum_surplus
 static_coefficients_daily <- colSums(static_coefficients_hourly, na.rm = TRUE)/sum(rowSums(static_coefficients_hourly), na.rm = T)
+static_coefficients_daily[1] <- 0.5
+static_coefficients_daily[2] <- 0.5
 
 # now I will calculate the surplus if this HOURLY coefficients where used to assign 
 # the energy repartition
@@ -155,7 +175,7 @@ df_new_assignation_using_hourly_coeffs <- data.frame("time" = time)
 
 for (i in vector_names_optimum_combination) {
   
-  # i = 2
+  # i = 1
   consumption <- df_day_1[, grep(pattern = paste0("cons_", i), x = colnames(df_day_1))]
   generation_to_assign <- generation * static_coefficients_hourly[, paste0("user_",i)]
   generation_assigned <- ifelse(generation_to_assign >= consumption, consumption, generation_to_assign)
@@ -177,21 +197,30 @@ for (i in vector_names_optimum_combination) {
 }
 
 df_gen_assigned <- df_new_assignation_using_hourly_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_hourly_coeffs))]
+# HARDCODED:
+colnames(df_gen_assigned)[2] <- 1 
+colnames(df_gen_assigned)[3] <- 4 
+
 df_gen_assigned_total <- rowSums(x = df_gen_assigned[, !(grepl("time", colnames(df_gen_assigned)))])
 surplus_total_hourly <- generation - df_gen_assigned_total
-surplus_total_daily_sum <- sum(surplus_total_hourly)  
-print("surplus_hourly = ", surplus_total_daily_sum)
+surplus_total_sum_hourly <- sum(surplus_total_hourly)  
+print(surplus_total_sum_hourly)
 
 df_plot_gen_assigned <- melt(data = df_gen_assigned, id.vars = "time", variable.name = "series")
 df_plot_generation <- melt(df_day_1[, grep(pattern = paste0(c("0","time"), collapse = "|"), x = colnames(df_day_1))], id.vars = "time", variable.name = "series")
 
 # plot done!
+# p <- ggplot() +
+#       geom_area(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series)) +
+#       geom_line(aes(x = df_plot_generation$time, y = df_plot_generation$value))  
+
 p <- ggplot() +
-      geom_area(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series)) +
-      geom_line(aes(x = df_plot_generation$time, y = df_plot_generation$value))  
+  # geom_line(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, color = df_plot_gen_assigned$series)) +
+  geom_line(aes(x = hour(df_plot_generation$time), y = df_plot_generation$value)) +
+  geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) + 
+  labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV dynamic assignation", fill = "User")  
 
-ggsave(filename = "generation_assigned_hourly.pdf", plot = p, width = 10)
-
+ggsave(filename = "dynamic_assigned.pdf", plot = p, width = 10)
 
 # now I will calculate the surplus if this DAILY coefficients where used to assign 
 # the energy repartition
@@ -220,10 +249,14 @@ for (i in vector_names_optimum_combination) {
 }
 
 df_gen_assigned <- df_new_assignation_using_daily_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_daily_coeffs))]
+# HARDCODED:
+colnames(df_gen_assigned)[2] <- 1 
+colnames(df_gen_assigned)[3] <- 4 
+
 df_gen_assigned_total <- rowSums(x = df_gen_assigned[, !(grepl("time", colnames(df_gen_assigned)))])
 surplus_total <- generation - df_gen_assigned_total
-surplus_total_sum <- sum(surplus_total)
-print("surplus_daily = ", surplus_total_daily_sum)
+surplus_total_sum_daily <- sum(surplus_total)
+print(surplus_total_sum_daily)
 
 df_plot_gen_assigned <- melt(data = df_gen_assigned, id.vars = "time", variable.name = "series")
 df_plot_generation <- melt(df_day_1[, grep(pattern = paste0(c("0","time"), collapse = "|"), x = colnames(df_day_1))], id.vars = "time", variable.name = "series")
@@ -231,11 +264,23 @@ df_plot_generation <- melt(df_day_1[, grep(pattern = paste0(c("0","time"), colla
 # df_plot$series <- as.factor(df_plot$series)
 
 # plot done!
-p <- ggplot() +
-      geom_area(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series)) +
-      geom_line(aes(x = df_plot_generation$time, y = df_plot_generation$value))  
+# p <- ggplot() +
+#       geom_area(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series)) +
+#       geom_line(aes(x = df_plot_generation$time, y = df_plot_generation$value))  
 
-ggsave(filename = "generation_assigned_daily.pdf", plot = p,  width = 10)
+# ifelse(df_plot_gen_assigned$series  
+
+p <- ggplot() +
+  # geom_line(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, color = df_plot_gen_assigned$series)) +
+  geom_line(aes(x = hour(df_plot_generation$time), y = df_plot_generation$value)) +
+  geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+  labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
+
+ggsave(filename = "static_assignation.pdf", plot = p,  width = 10)
+
+
+
+
 
 
 # plot done!
@@ -257,22 +302,66 @@ for (i in vector_names_optimum_combination) {
 }
 
 # TODO: this only works for 2 users
-df_plot$user <- ifelse(grepl(pattern = as.character(vector_names_optimum_combination[1]), x = as.character(df_plot$series)), vector_names_optimum_combination[1], vector_names_optimum_combination[2])
+# df_plot$user <- ifelse(grepl(pattern = as.character(vector_names_optimum_combination[1]), x = as.character(df_plot$series)), vector_names_optimum_combination[1], vector_names_optimum_combination[2])
+# 
+# p <- ggplot(df_plot) +
+#       geom_line(aes(x = time, y = value, colour = series))  +
+#       facet_wrap(facets = "user", nrow = 2)
+# 
+# ggsave(filename = "hola.pdf", plot = p,  width = 10)
 
-p <- ggplot(df_plot) +
-      geom_line(aes(x = time, y = value, colour = series))  +
-      facet_wrap(facets = "user", nrow = 2)
-
-ggsave(filename = "hola.pdf", plot = p,  width = 10)
-
+# TODO:
 # plot of accumulated grid consumption
-
 df_gen_assigned <- df_new_assignation_using_daily_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_daily_coeffs))]
 df_gen_assigned_total <- rowSums(x = df_gen_assigned[, !(grepl("time", colnames(df_gen_assigned)))])
 
 
-# plot showing that surplus using hourly coefficients is better
+# plot done!
+# plot showing that the surplus using hourly coefficients is better
+
+group = c("static", "dynamic")
+value = c(surplus_total_sum_daily, surplus_total_sum_hourly)
+
+df_plot <- data.frame("group" = group,
+                      "surplus" = value
+                      )
+# TODO: check sign!
+percentage <- round((surplus_total_sum_daily - surplus_total_sum_hourly) / surplus_total_sum_hourly, digits = 2)*100
+
+# Barplot
+bp <- ggplot(df_plot, aes(x = group, y = surplus, fill = group))+
+  geom_bar(width = 1, stat = "identity", alpha = 0.6) + 
+  # ggtitle(paste0("Surplus gain = ", percentage, "%")) + 
+  labs(x = "Type of coefficient", y = "PV surplus [kWh]", title = paste0("Surplus gain = ", percentage, "%")) +
+  theme(legend.position = "none")
+  
+ggsave(filename = "surplus_gain_different_coefficients.pdf", plot = bp, width = 4)
 
 
+ordered_daily_surplus <- daily_surplus[order(daily_surplus)]
+df_plot <- melt(ordered_daily_surplus)
+vector_names_combination <- c()
 
+for (i in 1:length(ordered_daily_surplus)) {
+  names_combination <- strsplit(x = as.character(names(ordered_daily_surplus)), split = "_")[[i]]
+  names_combination <- names_combination[!grepl(pattern = "surplus", x = names_combination)]
+  names_combination <- paste0(names_combination, collapse = "_")
+  vector_names_combination <- c(vector_names_combination, names_combination)
+}
 
+df_plot$combination <- vector_names_combination 
+rownames(df_plot) <- NULL
+# df_plot$value <- as.factor(df_plot$value)
+
+mean_surplus <- mean(df_plot$value)
+min_surplus <- df_plot$value[1]
+percentage <- round((mean_surplus - min_surplus) / mean_surplus, digits = 2)*100
+
+# plot done!
+bp <- ggplot(df_plot, aes(x = combination, y = value, fill = combination))+
+  geom_bar(width = 1, stat = "identity", alpha = 0.6) + 
+  # ggtitle(paste0("PV Surplus gain = ", percentage, "%")) +
+  labs(x = "Possible user combination", y = "PV surplus [kWh]", "title" = paste0("PV Surplus gain = ", percentage, "%")) + 
+  theme(legend.position = "none")
+
+ggsave(filename = "possible_user_combination.pdf", plot = bp, width = 4)

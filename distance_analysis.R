@@ -213,22 +213,45 @@ for (i in vector_values) {
 }
 
 
+colnames(df_stats)[2:10] <- c("Frechet", 
+                              "Kolmogorov", 
+                              "Itakura", 
+                              "Correlation", 
+                              "Covariance", 
+                              "Chi_squared", 
+                              "P_value", 
+                              "MNSE", 
+                              "Euclidean"  
+                              ) 
 df_plot_1 <- melt(data = df_stats, id.vars =  "user")
 df_plot_1$user = as.factor(df_plot_1$user)
 bar_stats <- ggplot(df_plot_1) + 
-  geom_bar(stat = "identity", width = 1, aes(x = variable, y = value, fill = user)) +
-  facet_wrap(facets = "variable", scales = "free")
+  geom_bar(stat = "identity", width = 1, aes(x = variable, y = value, fill = user), alpha = 0.8) +
+  facet_wrap(facets = "variable", scales = "free") + 
+  labs(x = "", y = "", title = "Comparing Generation and Consumption", fill = "User") +
+  theme(
+    # strip.background = element_blank(),
+    strip.text.x = element_blank()
+  )
 
-df_plot_2 <- melt(data = df_day_1_A[, !(colnames(df_day_1_A) %in% "value_pv_gen_0")], id.vars = "time", variable.name = "series")
-original_plots_cons <- ggplot(df_plot_2) + geom_line(aes(time,value, color = series)) + facet_wrap(facets = "series")
+df_day_1_A_plot <- df_day_1_A 
+df_day_1_A_plot$time <- hour(df_day_1_A_plot$time) 
+colnames(df_day_1_A_plot)[2] <- "PV_generation"
+colnames(df_day_1_A_plot)[3:7] <- c(1:5) 
+
+df_plot_2 <- melt(data = df_day_1_A_plot[, !(colnames(df_day_1_A_plot) %in% "PV_generation")], id.vars = "time", variable.name = "series")
+original_plots_cons <- ggplot(df_plot_2) + geom_line(aes(time,value, color = series)) + facet_wrap(facets = "series") +
   # facet_grid(series ~ ., scales = "free_y")  
+  labs(x = "Time [h]", y = "Electrical energy [kWh]", title = "User Consumption") + 
+  theme(legend.position = "none")
 
-plot_gen <- ggplot(df_day_1_A[, (colnames(df_day_1_A) %in% c("time", "value_pv_gen_0"))]) +
-  geom_line(aes(time, value_pv_gen_0))
+plot_gen <- ggplot(df_day_1_A_plot[, (colnames(df_day_1_A_plot) %in% c("time", "PV_generation"))]) +
+  geom_line(aes(time, PV_generation)) +
+  labs(x = "Time [h]", y = "Electrical energy [kWh]", title = "PV Generation")
   
 library("gridExtra")
-grid.arrange(plot_gen, original_plots_cons, bar_stats, nrow = 1)
-
+p <- grid.arrange(plot_gen, original_plots_cons, bar_stats, nrow = 1)
+ggsave(filename = "distance_parameters.pdf", plot = p, width = 13)
 
 df_sigmoid_stats <- data.frame()
 

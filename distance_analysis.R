@@ -1,4 +1,10 @@
+# en este paradigma:
+# Se calcula teniendo en cuenta tanto la inversión inicial como la semejanza entre la curva de 
+# consumo y la curva de generación, beneficiando en la asignación de energía a aquellos usuarios 
+# cuyos hábitos de consumo se asemejen más a los ciclos de generación
+  
 library(ggplot2)
+library("lubridate")
 
 filename_1 = "202005081411_charts_compare.csv"
 filename_2 = "202005081413_charts_compare.csv"
@@ -251,6 +257,8 @@ plot_gen <- ggplot(df_day_1_A_plot[, (colnames(df_day_1_A_plot) %in% c("time", "
   
 library("gridExtra")
 p <- grid.arrange(plot_gen, original_plots_cons, bar_stats, nrow = 1)
+
+
 ggsave(filename = "distance_parameters.pdf", plot = p, width = 13)
 
 df_sigmoid_stats <- data.frame()

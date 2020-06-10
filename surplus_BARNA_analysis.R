@@ -1,3 +1,11 @@
+# COEFICIENTES ESTÁTICOS
+# Predeterminados, proporcionales a la inversión inicial. Este tipo de repartición permite que cada inversor obtenga un porcentaje de la generación, aún en los momentos en los que su consumo es nulo, lo cual lleva a grandes excedentes para la comunidad.
+# 
+# COEFICIENTES DINÁMICOS (horarios)
+# Se calculan valorando tanto la inversión inicial de cada usuario como la proporción de consumo con respecto al consumo acumulado de todas los participantes. De esta forma se permite que el consorcio sea rentable para cada inversor y que el excedente de generación fotovoltaica global se minimice.    
+
+
+
 library(ggplot2)
 
 filename_1 = "202005081411_charts_compare.csv"
@@ -267,7 +275,7 @@ df_plot_generation <- melt(df_day_1[, grep(pattern = paste0(c("0","time"), colla
 # p <- ggplot() +
 #       geom_area(aes(x = df_plot_gen_assigned$time, y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series)) +
 #       geom_line(aes(x = df_plot_generation$time, y = df_plot_generation$value))  
-
+  
 # ifelse(df_plot_gen_assigned$series  
 
 p <- ggplot() +

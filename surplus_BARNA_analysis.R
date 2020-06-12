@@ -4,7 +4,7 @@
 # COEFICIENTES DINÁMICOS (horarios)
 # Se calculan valorando tanto la inversión inicial de cada usuario como la proporción de consumo con respecto al consumo acumulado de todas los participantes. De esta forma se permite que el consorcio sea rentable para cada inversor y que el excedente de generación fotovoltaica global se minimice.    
 
-
+  
 
 library(ggplot2)
 

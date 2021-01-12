@@ -1,98 +1,96 @@
-calculate_surplus <- function(df_generation, df_cons, combination){
-  not_selected_cons = is.na(combination) 
-  df_consumption = df_cons
-  df_consumption[, not_selected_cons] = 0
-  coeffs <- combination/100 
-  coeffs[is.na(coeffs)] = 0
-  df_generation_assigned <- as.data.frame(t(t(df_generation) *  coeffs))  
-  total_surplus <- rowSums(df_generation_assigned - df_consumption)
+calculate_gen_assigned <- function(df_gen, combination){
+  df_gen = as.data.frame(as.matrix(df_gen)%*%matrix(1, ncol =length(combination)))
+  df_gen_assigned <- as.data.frame(df_gen * combination[col(df_gen)])  
+  return(df_gen_assigned)
+}
+
+calculate_surplus <- function(df_gen, df_cons, combination){
+  not_selected_cons = (combination == 0) 
+  df_cons[, not_selected_cons] = 0
+  df_gen_assigned <- calculate_gen_assigned(df_gen, combination) 
+  total_surplus <- rowSums(df_gen_assigned - df_cons)
   hourly_surplus <- ifelse(total_surplus >= 0, total_surplus, 0)
   return(hourly_surplus)
 }
 
+calculate_params_period <- function(n_periods){
+  n_hours = floor(24/n_periods)
+  init = (array(0:(n_periods-1)) * n_hours) + 1
+  end = (array(1:(n_periods)) * n_hours) 
+  return(data.frame(init, end))  
+}
 
-optimizer <- function(X, class_per_feature, nclasses_per_feature, names_per_feature, levels_per_feature, 
-                      df_generation, df_cons){
+############################################################
+# GA functions
+
+calculate_combination_GA <- function(x, n_community){
+  selected = order(x, decreasing = T)[1:n]
+  combination = array(0, length(x))
+  combination[selected] = x[1:n]
+  total = sum(combination)
+  combination = combination/total
+  return(combination)    
+}
+
+fitness <- function(x, n_community, df_gen, df_cons){
   
-  # X = sample(c(0,1),nBits,replace=T)
+  # n_community = 2, amount of participans forming part of the community
+  # vector of length N (in this case N = 4, amount of participants
+  # for example
+  # x = c(0.2, 0.6, 0.5, 0.3) 
   
-  combination <- decodeValueFromBin(X, class_per_feature, nclasses_per_feature, levels_per_feature = levels_per_feature)
-  combination <- as.numeric(combination)
-  combination <- reconstruct_combination(combination) 
+  combination <- calculate_combination_GA(x, n_community)
+  hourly_surplus <- calculate_surplus(df_gen, df_cons, combination)
   
-  hourly_surplus <- calculate_surplus(df_generation, df_cons, combination)
+  score <- sum(hourly_surplus)  
   
-  # Proposed penalty (penalty if the surplus bound in violated)
-  # delta <- surplus *
-  
-  # if (any(delta!=0)) {
-  #   # Exponential parameter lambda
-  #   lambda <- 2
-  #   # Maximum delta allowed for each hour 
-  #   delta_limit <- 3
-  #   # (Both parameters should be hardcoded outside, during trial session are going to stay here)
-  #   # The soft restrictions has been implemented the following way:
-  #   # Exponential growth of penalty with homographic function to include the asymptote in the delta_limit
-  #     penalty_function <- function(x, delta_limit, lambda){
-  #        y = -exp(x)/(x-delta_limit)
-  #        return(y)
-  #     }
-  #
-  #   delta_penalty <- penalty_function(delta, delta_limit = 1.2, lamda)
-  
-  
-  #   delta_penalty[delta_penalty<0] <- 500000
-  #   penalty <- sum(delta_penalty)
-  # }
-  
-  # Cost function: sum over 24 hours
-  # check units (in price is euro/MWh and consumption Wh)??
-  penalty = 0
-  price = 1
-  
-  score <- sum(price * hourly_surplus) + penalty
   return(-score)
 }
 
-toBin <- function(x){ as.integer(paste(rev( as.integer(intToBits(x))),collapse="")) }
-
-decodeValueFromBin <- function(binary_representation, class_per_feature, nclasses_per_feature, 
-                               levels_per_feature = NULL, min_per_feature = NULL, max_per_feature = NULL){
+optimize_repartition_GA <- function(n_periods, periods, n_community, df_gen, df_cons){
   
-  bitOrders <- mapply(function(x) { nchar(toBin(x)) }, nclasses_per_feature)
-  #binary_representation <- X
-  binary_representation <- split(binary_representation, rep.int(seq.int(bitOrders), times = bitOrders))
-  orders <- sapply(binary_representation, function(x) { binary2decimal(gray2binary(x)) })
-  orders <- mapply(function(x){min(orders[x],nclasses_per_feature[x])},1:length(orders))
-  orders <- mapply(
-    function(x){
-      switch(class_per_feature[x],
-             "discrete"= levels_per_feature[[x]][orders[x]+1],
-             "int"= floor(seq(min_per_feature[x],max_per_feature[x],
-                              by=if(nclasses_per_feature[x]>0){
-                                (max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])
-                              }else{1}
-             )[orders[x]+1]),
-             "float"= seq(min_per_feature[x],max_per_feature[x],
-                          by=if(nclasses_per_feature[x]>0){
-                            (max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])
-                          }else{1})[orders[x]+1]
-      )
+  # initialize df for results
+  df_optimal_combination <- df_cons[0,]
+  
+  for (j in 1:n_periods) {
+    
+    init = periods$init[j] 
+    end = periods$end[j]
+    
+    df_gen_period = df_gen[init:end, ]
+    df_cons_period = df_cons[init:end, ]
+    if (sum(df_gen_period) > 0)  {
+      optim_results <- ga(type = "real-valued", fitness = fitness, 
+                          lower = array(0, dim = ncol(df_cons)), upper = array(1, dim = ncol(df_cons)),  
+                          n_community = n_community, df_gen = df_gen_period, df_cons = df_cons_period, 
+                          popSize = 100, maxiter = 1000, run = 100)
+      
+      # the algorithm gives as a result all the local minimums.. some criateria to select one of these minms?
+      solution <- optim_results@solution[1, ]
+      optimal_combination <- calculate_combination_GA(solution, n_community)
+    } else{
+      optimal_combination = array(0, dim = ncol(df_cons))
     }
-    ,1:length(orders))
-  return(unname(orders))
-}
-
-reconstruct_combination <- function(combination){
-  combination[is.na(combination)] = 0
-  if (sum(is.na(combination))) {
-    combination = c(50, NA, 50, NA)
-  } else{
-    combination = c(50, NA, 50, NA)
+    df_optimal_combination <- rbind(df_optimal_combination, optimal_combination) 
   }
-   
-  return(combination)
+  
+  colnames(df_optimal_combination) <- colnames(df_cons)
+  return(df_optimal_combination)
 }
 
+
+############################################################
+
+plot_assignation <- function(df_gen, df_gen_assigned){
+  
+  df_plot_gen_assigned <- melt(data = df_gen_assigned, variable.name = "series")
+  
+  p <- ggplot() +
+    geom_line(aes(x = 1:24, y = df_gen[, 1])) +
+    geom_area(aes(x = rep(x = 1:24, times = ncol(df_gen_assigned)), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+    # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
+  return(p)
+}
 
 

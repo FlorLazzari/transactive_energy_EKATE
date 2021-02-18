@@ -1,4 +1,5 @@
 library(ggplot2)
+library(lubridate)
 
 filename_consumption = "consumption_escuela.csv"
 df_cons = read.csv(file = filename_consumption, header = TRUE)

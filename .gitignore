@@ -1,0 +1,5 @@
+# ignore files in data folder
+data
+
+# ignore files in graphs folder
+graphs

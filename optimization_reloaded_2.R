@@ -1,0 +1,136 @@
+# import libraries
+library(lubridate)
+library(ggplot2)
+library(reshape2)
+library(GA)
+library(parallel)
+library(purrr)
+# and functions
+source("functions_new.R")
+
+##########################################################################################################
+# example
+
+filename_gen_1 = "202005081411_charts_compare.csv"
+# cons_1 is too high
+filename_cons_1 = "202005081413_charts_compare.csv"
+filename_cons_2 = "202005081655_charts_compare.csv"
+filename_cons_3 = "202005081656_charts_compare.csv"
+filename_cons_4 = "202005081658_charts_compare.csv"
+# new:
+filename_cons_5 = "202103171643_charts_historic.csv"
+# gen_5 is too low
+filename_gen_5 = "202103171649_charts_historic.csv"
+filename_cons_6 = "202103171657_charts_historic.csv"
+# gen_7 is too low
+filename_gen_7 = "202103171735_charts_historic_generation.csv"
+filename_cons_7 = "202103171735_charts_historic_cons.csv"
+filename_cons_8 = "202103171814_charts_historic.csv"
+filename_cons_9 = "202103171831_charts_historic.csv"
+filename_cons_10 = "202103171835_charts_historic.csv"
+# gen_10 is too low
+filename_gen_10 = "202103171838_charts_historic.csv"
+filename_cons_11 = "202103171858_charts_historic.csv"
+filename_cons_12 = "202103171905_charts_historic.csv"
+
+filename_cons_13 = "202103181018_charts_historic.csv"
+filename_cons_14 = "202103181023_charts_historic.csv"
+filename_cons_15 = "202103181029_charts_historic.csv"
+filename_cons_16 = "202103181032_charts_historic.csv"
+filename_cons_17 = "202103181037_charts_historic.csv"
+filename_cons_18 = "202103181040_charts_historic.csv"
+
+# TODO:
+# cons_1 y gen_1 corresponden al museo de diseño de barcelona -> son muy altos comparados al resto
+# la instalación es realmente muy grande
+# y el consumo base en enorme (porque es un museo enorme), con lo cual la instalación, por más de que sea enorme, no llega a cubrir los consumos del propio edificio 
+# (no es autosuficiente)--> qué sentido tiene repartir la energía?
+# con lo cual --> escenario fake: voy a usar la generación y no voy a usar el consumo del museo 
+
+# TODO: ojo! la instalación que estoy considerando tiene mas de 100kWh... la legislación no lo permite
+
+filenames_list = list(filename_gen_1, filename_cons_2, filename_cons_3, filename_cons_4, filename_cons_5, filename_cons_6, filename_cons_7, filename_cons_8, filename_cons_9, filename_cons_11, filename_cons_12, filename_cons_13, filename_cons_14, filename_cons_15, filename_cons_16, filename_cons_17, filename_cons_18)
+df = lapply(X = filenames_list, FUN = import_one_user)
+df_month_1 = select_month(df, m=11)
+df_month_1 = eliminate_outliers(df_month_1)
+df_month_1 = reducing_consumption_fake(df_month_1)
+
+p = initial_plot(df_month_1)
+
+df_gen = data.frame("gen_1" = df_month_1[, "gen_1"])
+df_cons = df_month_1[, grep(pattern = "cons", x = colnames(df_month_1))]
+
+# TODO:
+# changing NAs to 0
+df_gen[is.na(df_gen)] = 0
+df_cons[is.na(df_cons)] = 0
+
+# Size of the proposed community
+# TODO: This "maximum size" should be determined by the maximum of df_gen
+n_community = 4
+
+# a good estimation of the overall investment is:  
+# 1000*kWpico
+# if the max consumption is in summer I can approximate: 
+global_investment = max(df[[1]]$energy, na.rm = T)*1100
+
+#######################################################################################
+# TODO: calcular autoconsumo
+# porcentaje de autoconsumo
+# grafico de consumo con generación solar asignada para cada usuario
+
+# nested GA with selection of best answers in the begining  
+n_binary_rep = log(ncol(df_cons), base=2)
+# TODO: should change this
+individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
+  
+# checking:
+# sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment
+
+optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSoltuionSelection(n_community, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+
+
+comparison_combinations_obtained <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
+  
+}
+
+selection_best_combination <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
+
+  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+
+  index_order = order(new_surplus, decreasing = F)
+
+  optimum_coefficients = new_optimum_coefficients[index_order[1],]
+  surplus = new_surplus[index_order[1]]
+  payback = new_payback[index_order[1], ]
+  
+  return(list("optimum_coefficients" = optimum_coefficients,
+              "surplus" = surplus, 
+              "payback" = payback))
+}  
+
+df_gen_assigned = calculate_gen_assigned(df_gen = df_gen, combination = optimum_coefficients)
+
+df_gen_assigned_selected = df_gen_assigned[,optimum_coefficients != 0]
+
+plot_assignation(df_gen = df_gen, df_gen_assigned = df_gen_assigned)
+
+
+plot_assignation_daily_mean(df_gen, df_gen_assigned, time = df_month_1[, "time"], optimum_coefficients_selected = optimum_coefficients[optimum_coefficients != 0])
+
+############
+
+
+
+
+
+# for the mixed integer linear programming
+# write.csv(x = t(df_day_1), file = "df_day_1", row.names = FALSE)
+
+
+

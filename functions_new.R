@@ -1093,6 +1093,27 @@ fitness_payback <- function(x, n_community, df_gen, df_cons, rate_payback){
 }
 
 
+selection_best_combination <- function(optimal_combination_using_2_GAs){
+  
+  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+  
+  index_order = order(new_surplus, decreasing = F)
+  
+  optimum_coefficients = new_optimum_coefficients[index_order[1],]
+  surplus = new_surplus[index_order[1]]
+  payback = new_payback[index_order[1], ]
+  
+  return(list("optimum_coefficients" = optimum_coefficients,
+              "surplus" = surplus, 
+              "payback" = payback))
+}  
+
+
 ############################################################
 # plot
 
@@ -1114,7 +1135,7 @@ initial_plot <- function(df){
 }
 
 
-plot_assignation <- function(df_gen, df_gen_assigned){
+plot_assignation_monthly <- function(df_gen, df_gen_assigned){
   
   df_plot_gen_assigned <- melt(data = df_gen_assigned, variable.name = "series")
   
@@ -1123,6 +1144,25 @@ plot_assignation <- function(df_gen, df_gen_assigned){
     geom_area(aes(x = rep(x = 1:nrow(df_gen), times = ncol(df_gen_assigned)), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
     # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
     labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
+  return(p)
+}
+
+
+plot_solar_consumption_monthly <- function(df_gen, df_gen_assigned, df_cons){
+  
+  surplus <- df_gen_assigned - df_cons_selected
+  surplus[surplus < 0] = 0
+  
+  df_solar_consumption = df_gen_assigned - surplus  
+
+  df_solar_consumption <- melt(data = df_solar_constumption, variable.name = "series")
+  
+  p <- ggplot() +
+    geom_line(aes(x = 1:nrow(df_gen), y = df_gen[, 1])) +
+    geom_area(aes(x = rep(x = 1:nrow(df_gen_assigned), times = ncol(df_gen_assigned)), y = df_solar_consumption$value, fill = df_solar_consumption$series), alpha = 0.5) +
+    # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
+
   return(p)
 }
 
@@ -1148,15 +1188,63 @@ plot_assignation_daily_mean <- function(df_gen, df_gen_assigned, time, optimum_c
   return(p)
 }
 
+calculate_solar_consumption <- function(df_gen_assigned, df_cons_selected){
+  surplus <- df_gen_assigned - df_cons_selected
+  surplus[surplus < 0] = 0
+  
+  df_solar_consumption = df_gen_assigned - surplus  
+  return(df_solar_consumption)
+}
 
-plot_mean_hourly_PV_consumption <- function(df_gen_assigned, time, optimum_coefficients_selected){
 
-  df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
+plot_solar_consumption_daily_mean <- function(df_gen, df_gen_assigned, time){
   
   m = unique(month(time))
 
-  # plot 1: pie chart
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+
+  df_gen$hour = hour(time) 
+  df_solar_consumption$hour = hour(time)
   
+  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  
+  df_plot_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
+    geom_area(aes(x = df_plot_solar_consumption_mean[, "hour"], y = df_plot_solar_consumption_mean[, "value"], fill = df_plot_solar_consumption_mean[,"series"]), alpha = 0.5) +
+    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+  
+  return(p)
+}
+
+
+# TODO: these pie plots doesnt say much
+plot_pie_solar_consumption <- function(df_gen_assigned, df_cons_selected, time){
+
+  m = unique(month(time))
+  
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+  
+  df_plot_solar_consumption <- data.frame(
+    group = colnames(df_solar_consumption),
+    value = colMeans(df_solar_consumption)
+  )
+  
+  p <- ggplot() +
+    geom_bar(aes(x = "", y = df_plot_solar_consumption[, "value"], fill = df_plot_solar_consumption[,"group"]), alpha = 0.5, width = 1, stat = "identity") +
+    coord_polar("y", start=0) +
+    labs("title" = paste0("PV mean hourly consumption for month ",m), fill = "User")  
+
+  return(p)
+}
+
+
+plot_pie_gen_assigned <- function(df_gen_assigned, df_cons_selected, time){
+  
+  m = unique(month(time))
+
   df_plot_gen_assigned <- data.frame(
     group = colnames(df_gen_assigned),
     value = colMeans(df_gen_assigned)
@@ -1166,35 +1254,58 @@ plot_mean_hourly_PV_consumption <- function(df_gen_assigned, time, optimum_coeff
     geom_bar(aes(x = "", y = df_plot_gen_assigned[, "value"], fill = df_plot_gen_assigned[,"group"]), alpha = 0.5, width = 1, stat = "identity") +
     coord_polar("y", start=0) +
     labs("title" = paste0("PV mean hourly consumption for month ",m), fill = "User")  
-
+  
   return(p)
 }
 
 
-plot_individual_assignation_and_surplus <- function(df_gen, df_gen_assigned, time, optimum_coefficients_selected){
+#####################
+# TODO: should work on this plot to make it more understandable... 
+# could add the concept of: "percentage of self consumption"
+plot_individual_assignation_and_surplus <- function(df_gen_assigned, df_cons_selected, time){
   
   # plot 2: 
   # showing assignation + surplus
 
-  # TODO: this is wrong! work on this
-  
-  df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
+  # df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
   
   m = unique(month(time))
+
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+
+  surplus <- df_gen_assigned - df_cons_selected
+  surplus[surplus < 0] = 0
+  
   df_gen$hour = hour(time) 
+  df_solar_consumption$hour = hour(time)
+  df_cons_selected$hour = hour(time)
+  surplus$hour = hour(time)
   df_gen_assigned$hour = hour(time)
   
   df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
-
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean)
+  surplus_mean = aggregate(x = surplus, by = list(surplus$hour), FUN = mean) 
   df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
   
-  df_gen_assigned_mean$mean = rowSums(df_gen_assigned_mean[, -grep(pattern = "hour|Group", colnames(df_gen_assigned_mean))])
+  for (user in 1:ncol(df_cons_selected)) {
+    user = 2
+    p <- ggplot() +
+      # geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+user])) + 
+      geom_line(aes(x = df_solar_consumption_mean[, "hour"], y = df_solar_consumption_mean[, 1+user])) +
+      geom_line(aes(x = surplus_mean[, "hour"], y = surplus_mean[, 1+user])) +
+      # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+      labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
   
-  p <- ggplot() +
-    geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
-    geom_line(aes(x = df_gen_assigned_mean[, "hour"], y = df_gen_assigned_mean[, "mean"])) +
-    # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+    p <- ggplot() +
+      geom_line(aes(x = df_gen_assigned_mean[, "hour"], y = df_gen_assigned_mean[, 1+user])) +
+      geom_line(aes(x = surplus_mean[, "hour"], y = surplus_mean[, 1+user])) +
+      geom_line(aes(x = df_solar_consumption_mean[, "hour"], y = df_solar_consumption_mean[, 1+user])) +
+      # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
+      labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+    
+  }
   
   
   

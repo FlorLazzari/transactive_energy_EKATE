@@ -11,34 +11,34 @@ source("functions_new.R")
 ##########################################################################################################
 # example
 
-filename_gen_1 = "202005081411_charts_compare.csv"
+filename_gen_1 = "data/202005081411_charts_compare.csv"
 # cons_1 is too high
-filename_cons_1 = "202005081413_charts_compare.csv"
-filename_cons_2 = "202005081655_charts_compare.csv"
-filename_cons_3 = "202005081656_charts_compare.csv"
-filename_cons_4 = "202005081658_charts_compare.csv"
+filename_cons_1 = "data/202005081413_charts_compare.csv"
+filename_cons_2 = "data/202005081655_charts_compare.csv"
+filename_cons_3 = "data/202005081656_charts_compare.csv"
+filename_cons_4 = "data/202005081658_charts_compare.csv"
 # new:
-filename_cons_5 = "202103171643_charts_historic.csv"
+filename_cons_5 = "data/202103171643_charts_historic.csv"
 # gen_5 is too low
-filename_gen_5 = "202103171649_charts_historic.csv"
-filename_cons_6 = "202103171657_charts_historic.csv"
+filename_gen_5 = "data/202103171649_charts_historic.csv"
+filename_cons_6 = "data/202103171657_charts_historic.csv"
 # gen_7 is too low
-filename_gen_7 = "202103171735_charts_historic_generation.csv"
-filename_cons_7 = "202103171735_charts_historic_cons.csv"
-filename_cons_8 = "202103171814_charts_historic.csv"
-filename_cons_9 = "202103171831_charts_historic.csv"
-filename_cons_10 = "202103171835_charts_historic.csv"
+filename_gen_7 = "data/202103171735_charts_historic_generation.csv"
+filename_cons_7 = "data/202103171735_charts_historic_cons.csv"
+filename_cons_8 = "data/202103171814_charts_historic.csv"
+filename_cons_9 = "data/202103171831_charts_historic.csv"
+filename_cons_10 = "data/202103171835_charts_historic.csv"
 # gen_10 is too low
-filename_gen_10 = "202103171838_charts_historic.csv"
-filename_cons_11 = "202103171858_charts_historic.csv"
-filename_cons_12 = "202103171905_charts_historic.csv"
+filename_gen_10 = "data/202103171838_charts_historic.csv"
+filename_cons_11 = "data/202103171858_charts_historic.csv"
+filename_cons_12 = "data/202103171905_charts_historic.csv"
 
-filename_cons_13 = "202103181018_charts_historic.csv"
-filename_cons_14 = "202103181023_charts_historic.csv"
-filename_cons_15 = "202103181029_charts_historic.csv"
-filename_cons_16 = "202103181032_charts_historic.csv"
-filename_cons_17 = "202103181037_charts_historic.csv"
-filename_cons_18 = "202103181040_charts_historic.csv"
+filename_cons_13 = "data/202103181018_charts_historic.csv"
+filename_cons_14 = "data/202103181023_charts_historic.csv"
+filename_cons_15 = "data/202103181029_charts_historic.csv"
+filename_cons_16 = "data/202103181032_charts_historic.csv"
+filename_cons_17 = "data/202103181037_charts_historic.csv"
+filename_cons_18 = "data/202103181040_charts_historic.csv"
 
 # TODO:
 # cons_1 y gen_1 corresponden al museo de diseño de barcelona -> son muy altos comparados al resto
@@ -89,36 +89,26 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 
 optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSoltuionSelection(n_community, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
 
+# TODO: should work on this:
+# comparison_combinations_obtained <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
+#   
+# }
 
-comparison_combinations_obtained <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
-  
-}
+best_combination = selection_best_combination(optimal_combination_using_2_GAs)
 
-selection_best_combination <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
+# best_combination$surplus
+# best_combination$payback
 
-  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
-  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
-  pre_payback = optimal_combination_using_2_GAs$pre_payback
-  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
-  new_surplus = optimal_combination_using_2_GAs$new_surplus
-  new_payback = optimal_combination_using_2_GAs$new_payback
+df_gen_assigned = calculate_gen_assigned(df_gen = df_gen, combination = best_combination$optimum_coefficients)
+df_gen_assigned_selected = df_gen_assigned[,best_combination$optimum_coefficients != 0]
 
-  index_order = order(new_surplus, decreasing = F)
+df_cons_selected = df_cons[,best_combination$optimum_coefficients != 0]
 
-  optimum_coefficients = new_optimum_coefficients[index_order[1],]
-  surplus = new_surplus[index_order[1]]
-  payback = new_payback[index_order[1], ]
-  
-  return(list("optimum_coefficients" = optimum_coefficients,
-              "surplus" = surplus, 
-              "payback" = payback))
-}  
+# plot_assignation(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
 
-df_gen_assigned = calculate_gen_assigned(df_gen = df_gen, combination = optimum_coefficients)
+plot_consumption_solar(df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
 
-df_gen_assigned_selected = df_gen_assigned[,optimum_coefficients != 0]
-
-plot_assignation(df_gen = df_gen, df_gen_assigned = df_gen_assigned)
+plot_solar_consumption_daily_mean(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, time = df_month_1$time)
 
 
 plot_assignation_daily_mean(df_gen, df_gen_assigned, time = df_month_1[, "time"], optimum_coefficients_selected = optimum_coefficients[optimum_coefficients != 0])

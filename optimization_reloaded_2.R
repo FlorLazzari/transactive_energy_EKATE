@@ -1,6 +1,7 @@
 # import libraries
 library(lubridate)
 library(ggplot2)
+library(ggpubr)
 library(reshape2)
 library(GA)
 library(parallel)
@@ -87,18 +88,22 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # checking:
 # sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment
 
+
+tic = Sys.time()
 optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSoltuionSelection(n_community, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+toc = Sys.time()
+
+toc-tic
 
 # TODO: should work on this:
 # comparison_combinations_obtained <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
 #   
 # }
 
+# TODO: analysis comparing: "winter" - "summer" 
+# (do the optimization per month, because the billing is monthly and do the analysis seasonally)
+
 best_combination = selection_best_combination(optimal_combination_using_2_GAs)
-
-# best_combination$surplus
-# best_combination$payback
-
 df_gen_assigned = calculate_gen_assigned(df_gen = df_gen, combination = best_combination$optimum_coefficients)
 df_gen_assigned_selected = df_gen_assigned[,best_combination$optimum_coefficients != 0]
 
@@ -106,12 +111,75 @@ df_cons_selected = df_cons[,best_combination$optimum_coefficients != 0]
 
 # plot_assignation(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
 
-plot_consumption_solar(df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
+# plot_consumption_solar(df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
 
 plot_solar_consumption_daily_mean(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, time = df_month_1$time)
+plot_disaggregated_daily_mean_per_user(df_gen_assigned = df_gen_assigned_selected, df_cons_selected = df_cons_selected, time = df_month_1[, "time"])
 
+plot_disaggregated_daily_mean_community(df_gen_assigned = df_gen_assigned_selected, df_cons_selected = df_cons_selected, time = df_month_1[, "time"])
 
-plot_assignation_daily_mean(df_gen, df_gen_assigned, time = df_month_1[, "time"], optimum_coefficients_selected = optimum_coefficients[optimum_coefficients != 0])
+# TODO: how to show our novelty?? 
+# compare self consumption and surplus with repartition considering:
+# .standard coefficient (lo que te dice red electrica si no haces ningun analisis) and our coeff 
+# .the rest of the best combinations selected
+# compare cost of electricity in 25 years with and without community (solar assignation)
+
+# how to compare with other selection?? 
+# .compare with a random selection of the users?? this doesnt make much sense to me 
+# .compare with a selection in which none of this users exist? I should calculate the same optimization but filling with zeros in the columns of the opt_combination in the df_cons 
+
+# TODO:
+plot_comparison <- function(df_gen = df_gen, optimum_combination = best_combination$optimum_coefficients[best_combination$optimum_coefficients != 0], df_cons_selected = df_cons[best_combination$optimum_coefficients != 0]){
+  
+  df_gen_assigned_selected = calculate_gen_assigned(df_gen = df_gen, combination = combination)
+  solar_consumption = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  grid = df_cons_selected - df_gen_assigned_selected
+  grid[grid < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+
+  ##################################
+  
+  combination_non_optimum = rep(1/n_community,n_community)
+  
+  df_gen_assigned_selected_non_optimum = calculate_gen_assigned(df_gen = df_gen, combination = combination)
+  solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
+  grid_non_optimum = df_cons_selected - df_gen_assigned_selected_non_optimum
+  grid_non_optimum[grid_non_optimum < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+  
+  ##################################
+
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected)
+  cost_sun = purchase_price*colSums(grid) - sale_price * combination * sum(solar_surplus)
+  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * non_optimum_combination * sum(solar_surplus_non_optimum)
+  
+  length_period = nrow(df_cons_selected)
+  cost_old_one_year = cost_old * 24*360 / length_period
+  cost_sun_one_year = cost_sun * 24*360 / length_period
+  cost_sun_one_year_non_optimum = cost_sun_non_optimum * 24*360 / length_period
+
+  cost_old_20_years = cost_old_one_year * 20
+  cost_sun_20_years = cost_sun_one_year * 20
+  cost_sun_non_optimum_one_year = cost_sun_one_year_non_optimum * 20
+  
+  # bar graph: what would you have paid in the following 20 years?
+  # .with the optimum community
+  # .with the non optimum community
+  # .without the community
+
+}
+
 
 ############
 

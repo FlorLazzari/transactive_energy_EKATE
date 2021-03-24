@@ -1260,92 +1260,134 @@ plot_pie_gen_assigned <- function(df_gen_assigned, df_cons_selected, time){
 
 
 #####################
-# TODO: should work on this plot to make it more understandable... 
-# could add the concept of: "percentage of self consumption"
-plot_individual_assignation_and_surplus <- function(df_gen_assigned, df_cons_selected, time){
-  
-  # plot 2: 
-  # showing assignation + surplus
 
-  # df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
+plot_disaggregated_daily_mean_per_user <- function(df_gen_assigned, df_cons_selected, time){
   
-  m = unique(month(time))
+  # calculate solar consumption and surplus
+  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
 
-  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
-
-  surplus <- df_gen_assigned - df_cons_selected
-  surplus[surplus < 0] = 0
+  solar_surplus <- df_gen_assigned - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
   
-  df_gen$hour = hour(time) 
-  df_solar_consumption$hour = hour(time)
+  grid = df_cons_selected - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # add hour column
+  solar_consumption$hour = hour(time)
+  solar_surplus$hour = hour(time)
+  grid$hour = hour(time)
+  
+  # aggregate
+  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+
+  # to calculate the self consumption and surplus 
   df_cons_selected$hour = hour(time)
-  surplus$hour = hour(time)
-  df_gen_assigned$hour = hour(time)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
   
-  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
-  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
-  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean)
-  surplus_mean = aggregate(x = surplus, by = list(surplus$hour), FUN = mean) 
+  df_gen_assigned$hour = hour(time)
   df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
   
-  for (user in 1:ncol(df_cons_selected)) {
-    user = 2
-    p <- ggplot() +
-      # geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
-      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+user])) + 
-      geom_line(aes(x = df_solar_consumption_mean[, "hour"], y = df_solar_consumption_mean[, 1+user])) +
-      geom_line(aes(x = surplus_mean[, "hour"], y = surplus_mean[, 1+user])) +
-      # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-      labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+  daily_hour <- solar_surplus_mean$hour
+
+  plots_list = list()
   
+  for (user in 1:(ncol(df_cons_selected)-1)) {
+
+    solar_consumption_mean_user <- solar_consumption_mean[, c(1+user)]
+    grid_mean_user <- grid_mean[, c(1+user)]
+    solar_surplus_mean_user <- solar_surplus_mean[, c(1+user)]
+    
+    df_plot <- data.frame("hour" = daily_hour,
+                          "Solar_surplus" = solar_surplus_mean_user,
+                          "Solar_consumption" = solar_consumption_mean_user,
+                          "Grid_consumption" = grid_mean_user
+                          )
+      
+    df_plot = melt(df_plot, id.vars = "hour")
+    
+    # TODO: understand which of the 2 is the correct one
+    # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+    self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+    
+    surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, user+1])  
+
     p <- ggplot() +
-      geom_line(aes(x = df_gen_assigned_mean[, "hour"], y = df_gen_assigned_mean[, 1+user])) +
-      geom_line(aes(x = surplus_mean[, "hour"], y = surplus_mean[, 1+user])) +
-      geom_line(aes(x = df_solar_consumption_mean[, "hour"], y = df_solar_consumption_mean[, 1+user])) +
-      # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-      labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, user+1])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("User ", user,": self consumption = ", round(self_consumption_percentage_mean, digits = 2), " & surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
+    
+    ggsave(filename = paste0("graphs/user_",user), plot = p, device = "pdf")
     
   }
-  
-  
-  
-  
-  
-  # df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
-  # 
-  # df_gen$hour = hour(time) 
-  # df_gen_assigned$hour = hour(time)
-  # 
-  # df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
-  # df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
-  # 
-  # df_plot_gen_assigned <- melt(data = df_gen_assigned_mean[, -grep(pattern = "Group.1", x = colnames(df_gen_assigned_mean))], variable.name = "series", id.vars = "hour")
-  # 
-  # p <- ggplot() +
-  #   geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
-  #   geom_area(aes(x = df_plot_gen_assigned[, "hour"], y = df_plot_gen_assigned[, "value"], fill = df_plot_gen_assigned[,"series"]), alpha = 0.5) +
-  #   # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-  #   labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV static assignation for month ",m), fill = "User")  
-  # 
-  # 
-  # df_gen_assigned = df_gen_assigned[, order(optimum_coefficients_selected, decreasing = T)]
-  # 
-  # df_gen$hour = hour(time) 
-  # df_gen_assigned$hour = hour(time)
-  # 
-  # df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
-  # df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
-  # 
-  # df_plot_gen_assigned <- melt(data = df_gen_assigned_mean[, -grep(pattern = "Group.1", x = colnames(df_gen_assigned_mean))], variable.name = "series", id.vars = "hour")
-  # 
-  # p <- ggplot() +
-  #   geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
-  #   geom_area(aes(x = df_plot_gen_assigned[, "hour"], y = df_plot_gen_assigned[, "value"], fill = df_plot_gen_assigned[,"series"]), alpha = 0.5) +
-  #   # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-  #   labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV static assignation for month ",m), fill = "User")  
+  return()
 }
 
 
+plot_disaggregated_daily_mean_community <- function(df_gen_assigned, df_cons_selected, time){
+  
+  # calculate solar consumption and surplus
+  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # add hour column
+  solar_consumption$hour = hour(time)
+  solar_surplus$hour = hour(time)
+  grid$hour = hour(time)
+  
+  # aggregate
+  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+  
+  # to calculate the self consumption and surplus 
+  df_cons_selected$hour = hour(time)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
+  
+  df_gen_assigned$hour = hour(time)
+  df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
+  
+  daily_hour <- solar_surplus_mean$hour
 
-# plot 3: 
-# one plot for each user
+  ########################
+  
+  solar_consumption_mean_community <- rowSums(solar_consumption_mean[, 2:(n_community+1)])
+  grid_mean_community <- rowSums(grid_mean[, 2:(n_community+1)])  
+  solar_surplus_mean_community <- rowSums(solar_surplus_mean[, 2:(n_community+1)])  
+  
+  df_plot <- data.frame("hour" = daily_hour,
+                        "Solar_surplus" = solar_surplus_mean_community,
+                        "Solar_consumption" = solar_consumption_mean_community,
+                        "Grid_consumption" = grid_mean_community
+                        )
+  
+  df_plot = melt(df_plot, id.vars = "hour")
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  
+  surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, user+1])  
+  
+  index_order = order(colSums(df_cons_selected_mean[2:5]))
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[, 1+index_order[2]])) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[, 1+index_order[2]] + df_cons_selected_mean[, 1+index_order[3]] )) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[, 1+index_order[2]] + df_cons_selected_mean[, 1+index_order[3]] + df_cons_selected_mean[, 1+index_order[4]])) +
+    geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+    grids() + 
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("User ", user,": self consumption = ", round(self_consumption_percentage_mean, digits = 2), " & surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
+    
+  ggsave(filename = paste0("graphs/community_",), plot = p, device = "pdf")
+    
+  return()
+}

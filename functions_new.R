@@ -107,6 +107,39 @@ reducing_consumption_fake <- function(df){
 }
 
 
+calculate_n_community_max <- function(generation = df_gen$gen_1, df_cons, time = df_month_1$time){
+  
+  # minimum self consumption: 0.2?
+  
+  # TODO: a some small problem when the peak is a platau
+  
+  # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
+  # max_insolation_hours = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = which.max)
+  
+  first_derivative = sign(diff(generation))
+  # max_insolation_hours = which(diff(a) == -2)
+  
+  peak_insolation_hours = (diff(first_derivative) == -2)
+  # TODO: this makes sense if we are studing only one month (change the 2 for a 3 is we are studing one year)
+  high_insolation_hours = max(generation, na.rm = T)/2 < generation  
+  
+  # completing borders:
+  peak_insolation_hours = c(T, peak_insolation_hours, T)
+  max_insolation_hours = peak_insolation_hours & high_insolation_hours
+  
+  # checking:
+  # peaks = generation
+  # peaks[!max_insolation_hours] = NA
+  # plot(generation, type = "l")
+  # points(peaks)
+  
+  n_community_max = 1 + ceiling(1/mean(colMeans(df_cons[max_insolation_hours, ] / generation[max_insolation_hours])))
+  
+  return(n_community_max)
+}
+
+
+
 ############################################################
 # auxiliary functions
 
@@ -422,11 +455,25 @@ optimize_using_2nested_GAs <- function(n_community, n_binary_rep, df_gen, df_con
 # }
 
 
-optimize_using_2_GAs_withBestSoltuionSelection <- function(n_community, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
+optimize_using_2_GAs_withBestSolutionSelection <- function(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
   
   # TODO: understand the criteria of the keepBest = T
-  pre_optimal_combinations <- pre_optimization_for_nested(n_community, n_binary_rep, df_gen, df_cons)
+  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
+  
+  pre_optimal_combinations <- pre_optimization_for_nested(n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen, df_cons = df_cons)
+  # not all of the combinations are of the size = n_community_max (some are smaller)
+
+  # TODO: separate the combinations according to the number n_community_per_combination
+  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
+  
+  # checking:
+  # n_community_per_combination[n_community_per_combination_order]
+  
+  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
+  n_community_vector = rowSums(pre_optimal_combinations)
+  
   pre_optimum_coefficients = t((apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_coefficients, df_gen = df_gen, df_cons = df_cons)))
+  # but all of the coefficients sum 1
   hourly_surplus = apply(X = pre_optimum_coefficients, MARGIN = 1, FUN = calculate_surplus_hourly_individual, df_gen = df_gen, df_cons = df_cons)
   pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
   
@@ -435,37 +482,38 @@ optimize_using_2_GAs_withBestSoltuionSelection <- function(n_community, n_binary
   # nrow(pre_optimal_combinations)
   # hist(as.numeric(lapply(X = surplus, FUN = sum)))
   # sum(df_gen)
-
+  
   new_optimum_coefficients = pre_optimum_coefficients
   new_surplus = rep(0, nrow(pre_optimal_combinations))
   
   new_payback = pre_optimum_coefficients
   pre_payback = pre_optimum_coefficients
   
-  # here I will copy the "fitness_nested_outside":
   for (i in 1:nrow(pre_optimal_combinations)) {
     
     combination_selected = pre_optimal_combinations[i, ]
-    
     df_cons_selected = df_cons[,combination_selected==1]
-    
     individual_investment_max = individual_investment[combination_selected==1]  
-    
     coefficients = calculate_coefficients(df_gen = df_gen, df_cons = df_cons, combination = combination_selected)
-    surplus_min_x = sum(calculate_surplus_hourly_individual(df_gen, df_cons, coefficients))
-    
-    # this "if" is to:
-    # solve problem: for the cases in which combination is less than n_community: 
-    # a way to "preoptimize inside"
-    
-    if (sum(combination_selected) == n_community &
-        sum(individual_investment_max) > global_investment) {
+    # surplus_min_x = sum(calculate_surplus_hourly_individual(df_gen, df_cons, coefficients))
+
+    # if (sum(combination_selected) == n_community &
+    #     sum(individual_investment_max) > global_investment) {
+
+    if (sum(individual_investment_max) > global_investment) {
       
+      n_community = as.numeric(n_community_vector[i])
+          
       # x just selects the users, no need to calculate the optimum combination here
       # I think calculating the coeffs should be inside the "inside GA"
       # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
       
       individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+      
+      # just checking
+      # if (any(individual_investment_selected > individual_investment_max)){
+      #   print("fail")
+      # }
       
       pre_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, pre_optimum_coefficients[i,combination_selected!=0])
       
@@ -507,7 +555,7 @@ pre_optimization_for_nested <- function(n_community, n_binary_rep, df_gen, df_co
     
   optim_results <- ga(type = "binary", fitness = fitness, 
                       nBits = n_binary_rep*n_community,
-                      n_community = n_community, df_gen = df_gen, df_cons = df_cons, 
+                      n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
                       # popSize = 100, maxiter = 1000, run = 100)
                       popSize = 200, maxiter = 100, run = 50,
                       crossover = purrr::partial(bee_uCrossover, n_binary_rep = n_binary_rep, n_community = n_community), 
@@ -527,7 +575,7 @@ pre_optimization_for_nested <- function(n_community, n_binary_rep, df_gen, df_co
   solutions = t(as.data.frame(split(x = x_solution, f = factor)))
   
   solutions = solutions[!duplicated(solutions), ]
-  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary))
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep))
   
   return(combinations)
 }
@@ -983,7 +1031,7 @@ fitness_payback <- function(x, n_community, df_gen, df_cons, rate_payback){
 }
 
 
-calculate_combination_for_GA_binary <- function(x){
+calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep){
   
   combination = rep(0, ncol(df_cons))
   
@@ -1035,13 +1083,13 @@ calculate_coefficients <- function(df_gen, df_cons, combination){
 # }
 
 
-fitness <- function(x, n_community, df_gen, df_cons){
+fitness <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   
   # tests -> lower number, bigger number:
   # x = rep(0, n_binary_rep*n_community)
   # x = rep(1, n_binary_rep*n_community)
   
-  combination = calculate_combination_for_GA_binary(x)
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep)
   
   optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
   
@@ -1387,7 +1435,7 @@ plot_disaggregated_daily_mean_community <- function(df_gen_assigned, df_cons_sel
     grids() + 
     labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("User ", user,": self consumption = ", round(self_consumption_percentage_mean, digits = 2), " & surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
     
-  ggsave(filename = paste0("graphs/community_",), plot = p, device = "pdf")
+  ggsave(filename = paste0("graphs/community"), plot = p, device = "pdf")
     
   return()
 }

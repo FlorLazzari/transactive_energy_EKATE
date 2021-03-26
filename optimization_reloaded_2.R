@@ -52,7 +52,7 @@ filename_cons_18 = "data/202103181040_charts_historic.csv"
 
 filenames_list = list(filename_gen_1, filename_cons_2, filename_cons_3, filename_cons_4, filename_cons_5, filename_cons_6, filename_cons_7, filename_cons_8, filename_cons_9, filename_cons_11, filename_cons_12, filename_cons_13, filename_cons_14, filename_cons_15, filename_cons_16, filename_cons_17, filename_cons_18)
 df = lapply(X = filenames_list, FUN = import_one_user)
-df_month_1 = select_month(df, m=11)
+df_month_1 = select_month(df, m=7)
 df_month_1 = eliminate_outliers(df_month_1)
 df_month_1 = reducing_consumption_fake(df_month_1)
 
@@ -67,20 +67,26 @@ df_gen[is.na(df_gen)] = 0
 df_cons[is.na(df_cons)] = 0
 
 # Size of the proposed community
-# TODO: This "maximum size" should be determined by the maximum of df_gen
-n_community = 4
+# TODO: This "size of the community" should be determined by something related to the maximum of df_gen
+# now it is set to be fixed, should be a maximum.. should change the place where the coefficients are calculated
 
+# TODO: working here, should order my ideas! what do I want to calculate?
+
+# should always summer months to calculate the community max
+n_community_max = calculate_n_community_max(generation = df_gen$gen_1, df_cons, time = df_month_1$time)
+n_community_max = 6
+
+# TODO
 # a good estimation of the overall investment is:  
 # 1000*kWpico
 # if the max consumption is in summer I can approximate: 
 global_investment = max(df[[1]]$energy, na.rm = T)*1100
 
 #######################################################################################
-# TODO: calcular autoconsumo
-# porcentaje de autoconsumo
-# grafico de consumo con generación solar asignada para cada usuario
 
-# nested GA with selection of best answers in the begining  
+df_cons = cbind(df_cons, df_cons)
+colnames(df_cons)[17:32] = paste0(rep("cons_", 16),17:32)
+
 n_binary_rep = log(ncol(df_cons), base=2)
 # TODO: should change this
 individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
@@ -88,17 +94,51 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # checking:
 # sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment
 
-
 tic = Sys.time()
-optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSoltuionSelection(n_community, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
-toc = Sys.time()
+# TODO: 
+# why the first run has this error? is it still appearing?
+# Error in gareal_lsSelection_Rcpp(object) : 
+#   Too few positive probabilities! 
 
+optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSolutionSelection(n_community_max = n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+toc = Sys.time()
 toc-tic
 
-# TODO: should work on this:
-# comparison_combinations_obtained <- function(pre_optimum_coefficients, pre_surplus, pre_payback, new_optimum_coefficients, new_surplus, new_payback){
-#   
-# }
+# TODO: important! run the "optimize_using_2_GAs_withBestSolutionSelection" several times and see if the results are simmilar
+# TODO: how to compare if the results are simmilar? should understand a plot to show this...
+# TODO: compare in function of the number n_community (different colors for the n_community)
+
+plot_results(optimal_combination_using_2_GAs){
+  
+  # pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  # pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  # pre_payback = optimal_combination_using_2_GAs$pre_payback
+  # 
+  # index_pre_order = order(new_surplus, decreasing = F)
+  # 
+  # pre_optimum_coefficients = pre_optimum_coefficients[index_pre_order[1:5],]
+  # pre_surplus = pre_surplus[index_pre_order[1:5]]
+  # pre_payback = pre_payback[index_pre_order[1:5], ]
+  
+
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+  
+  index = order(new_surplus, decreasing = F)[order(new_surplus, decreasing = F) %in% which(new_surplus < 1000000)]
+
+  new_surplus = new_surplus[index]
+  new_payback = new_payback[index, ]
+
+  payback_ideal = 4
+  cost_payback = rowSums(exp(new_payback - payback_ideal))
+
+  # TODO: study carefully this graph, does this make sense?
+  ggplot() + geom_point(aes(x = 1:length(new_surplus), y = new_surplus))
+  ggplot() + geom_point(aes(x = cost_payback, y = new_surplus))
+
+}
+
 
 # TODO: analysis comparing: "winter" - "summer" 
 # (do the optimization per month, because the billing is monthly and do the analysis seasonally)
@@ -108,10 +148,6 @@ df_gen_assigned = calculate_gen_assigned(df_gen = df_gen, combination = best_com
 df_gen_assigned_selected = df_gen_assigned[,best_combination$optimum_coefficients != 0]
 
 df_cons_selected = df_cons[,best_combination$optimum_coefficients != 0]
-
-# plot_assignation(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
-
-# plot_consumption_solar(df_gen_assigned = df_gen_assigned_selected, df_cons = df_cons_selected)
 
 plot_solar_consumption_daily_mean(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected, time = df_month_1$time)
 plot_disaggregated_daily_mean_per_user(df_gen_assigned = df_gen_assigned_selected, df_cons_selected = df_cons_selected, time = df_month_1[, "time"])
@@ -128,7 +164,9 @@ plot_disaggregated_daily_mean_community(df_gen_assigned = df_gen_assigned_select
 # .compare with a random selection of the users?? this doesnt make much sense to me 
 # .compare with a selection in which none of this users exist? I should calculate the same optimization but filling with zeros in the columns of the opt_combination in the df_cons 
 
-# TODO:
+
+# TODO: working here
+# TODO: should do a graph to show someway the economic benefit
 plot_comparison <- function(df_gen = df_gen, optimum_combination = best_combination$optimum_coefficients[best_combination$optimum_coefficients != 0], df_cons_selected = df_cons[best_combination$optimum_coefficients != 0]){
   
   df_gen_assigned_selected = calculate_gen_assigned(df_gen = df_gen, combination = combination)
@@ -184,6 +222,17 @@ plot_comparison <- function(df_gen = df_gen, optimum_combination = best_combinat
 ############
 
 
+# TODO: cada comunidad energética definirá su objetivo como comunidad
+# por ejemplo:
+# quiero optimizar payback y que los coeficientes sean fijos
+# quiero optimizar el surplus y que los coefs sean dinámicos
+# balance de hippiesmo y capitalismo
+# flexibilidad de riesgo, cuanto riesgo estamos dispuestos a asumir
+
+
+# TODO:
+# se podría hacer que se cobre un beta distinto para la venta de excedentes?
+# de modo que todos cobren el mismo porcentaje de los excedentes totales sumados de la comunidad
 
 
 

@@ -1,5 +1,9 @@
-############################################################
-# data reading 
+############################# data reading #############################
+
+# > min(as.Date(df_cons_1$time))
+# [1] "2019-04-30"
+# > max(as.Date(df_cons_1$time))
+# [1] "2020-05-01"
 
 
 import_one_user <- function(filename_1){
@@ -10,33 +14,958 @@ import_one_user <- function(filename_1){
 }
 
 
-generate_fake_data_test1 <- function(df_gen_1, df_cons_1, df_cons_2, df_cons_3, df_cons_4){
+select_month <- function(df, m=6){
   
-  # select only a random day just to start (day 1 had some problems for user 3):
-  df_cons_2_day_1 <- df_cons_2[grepl(pattern = "2019-06-01", df_cons_2$time), ]
-  df_cons_3_day_1 <- df_cons_3[grepl(pattern = "2019-06-01", df_cons_3$time), ]
-  df_cons_4_day_1 <- df_cons_4[grepl(pattern = "2019-06-01", df_cons_4$time), ]
-  # CHEATING
-  df_cons_4_day_1$energy <- df_cons_4_day_1$energy*c(0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8,
-                                                     1.8, 1.8, 2.7, 2.7, 2.7, 2.7, 2.7, 1.8, 1.8, 1.8, 1.8, 1.8)
-  df_gen_1_day_1 <- df_gen_1[grepl(pattern = "2019-06-01", df_gen_1$time), ]
-  df_cons_1_day_1 <- df_cons_1[grepl(pattern = "2019-06-01", df_cons_1$time), ] 
-  # CHEATING
-  df_cons_1_day_1$energy <- df_cons_1_day_1$energy * 0.3
-  df_cons_1_day_1$energy <- df_cons_1_day_1$energy*c(1.8, 1.8, 1.8, 1.8, 1.8, 2.7, 2.7, 2.7, 1.8, 1.8, 1.8, 1.8,
-                                                   0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
+  # select only a random month just to start:
+  dates = seq(from = as.Date(paste0("2019-", as.character(m), "-01")), to = as.Date(paste0("2019-", as.character(m+1), "-01")), by = "day")
+
+  # df_month_1 <- df[as.Date(df$time) %in% dates, ]
+  df_month_1 = df[[1]][as.Date(df[[1]]$time) %in% dates, ]
+  colnames(df_month_1)[2] = "gen_1"
   
-  list_df = list(df_gen_1_day_1, df_cons_1_day_1, df_cons_2_day_1, df_cons_3_day_1, df_cons_4_day_1)
-  vector_colnames = c("gen_1", "cons_1", "cons_2", "cons_3", "cons_4")
+  vector_colnames = paste0("cons_", 1:(length(df)-1))
   
-  df_day_1 <- list_df[[1]]
-  colnames(df_day_1)[2] = vector_colnames[1]
-  for (i in 2:length(list_df)) {
-    df_day_1 <- merge(df_day_1, list_df[[i]], by = "time")
-    colnames(df_day_1)[i+1] = vector_colnames[i]
+  for (i in 2:length(df)) {
+    df_month_1 <- merge(df_month_1, df[[i]], by = "time")
+    colnames(df_month_1)[i+1] = vector_colnames[i-1]
+  }
+
+  return(df_month_1)
+}
+
+
+eliminate_outliers <- function(df, max_cut=160){
+  df_mod = df
+  df_mod[df_mod > max_cut] = NA
+  df_mod[, 1] = df[, 1]
+  return(df_mod)
+}
+
+
+reducing_consumption_fake <- function(df){
+  
+  max_gen = max(df$gen_1, na.rm = T)
+
+  cols_high = unique(ceiling(which(df > max_gen)/nrow(df_month_1)))
+  cols_high = cols_high[-1]
+  
+  df[,cols_high] = df[,cols_high]/3  
+  
+  return(df)
+}
+
+
+############################# operative #############################
+
+
+optimize_using_2_GAs_withBestSolutionSelection <- function(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
+  
+  # TODO: understand the criteria of the keepBest = T
+  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
+  
+  pre_optimal_combinations <- optimization_1(n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen, df_cons = df_cons)
+  # not all of the combinations are of the size = n_community_max (some are smaller)
+
+  # TODO: separate the combinations according to the number n_community_per_combination
+  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
+  
+  # checking:
+  # n_community_per_combination[n_community_per_combination_order]
+  
+  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
+  n_community_vector = rowSums(pre_optimal_combinations)
+  
+  pre_optimum_coefficients = t((apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_coefficients, df_gen = df_gen, df_cons = df_cons)))
+  # but all of the coefficients sum 1
+  hourly_surplus = apply(X = pre_optimum_coefficients, MARGIN = 1, FUN = calculate_surplus_hourly_individual, df_gen = df_gen, df_cons = df_cons)
+  pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
+  
+  # checking:
+  # colSums(pre_optimal_combinations)
+  # nrow(pre_optimal_combinations)
+  # hist(as.numeric(lapply(X = surplus, FUN = sum)))
+  # sum(df_gen)
+  
+  new_optimum_coefficients = pre_optimum_coefficients
+  new_surplus = rep(0, nrow(pre_optimal_combinations))
+  
+  new_payback = pre_optimum_coefficients
+  pre_payback = pre_optimum_coefficients
+  
+  for (i in 1:nrow(pre_optimal_combinations)) {
+    
+    combination_selected = pre_optimal_combinations[i, ]
+    df_cons_selected = df_cons[,combination_selected==1]
+    individual_investment_max = individual_investment[combination_selected==1]  
+    coefficients = calculate_coefficients(df_gen = df_gen, df_cons = df_cons, combination = combination_selected)
+    # surplus_min_x = sum(calculate_surplus_hourly_individual(df_gen, df_cons, coefficients))
+
+    # if (sum(combination_selected) == n_community &
+    #     sum(individual_investment_max) > global_investment) {
+
+    if (sum(individual_investment_max) > global_investment) {
+      
+      n_community = as.numeric(n_community_vector[i])
+          
+      # x just selects the users, no need to calculate the optimum combination here
+      # I think calculating the coeffs should be inside the "inside GA"
+      # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+      
+      individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+      
+      # just checking
+      # if (any(individual_investment_selected > individual_investment_max)){
+      #   print("fail")
+      # }
+      
+      pre_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, pre_optimum_coefficients[i,combination_selected!=0])
+      
+      optim_results <- ga(type = "real-valued", fitness = fitness_2, 
+                          lower = array(0, dim = n_community), upper = array(1, dim = n_community),  
+                          df_gen = df_gen, df_cons_selected = df_cons_selected, combination = combination_selected, 
+                          individual_investment = individual_investment_selected,
+                          popSize = 100, maxiter = 5, run = 5)
+      
+      coefficients_optimum <- optim_results@solution[1, ]
+      coefficients_optimum = coefficients_optimum/sum(coefficients_optimum)
+      
+      combination_optimum = combination_selected
+      combination_optimum[combination_optimum!=0] = coefficients_optimum
+      
+      new_optimum_coefficients[i, ] = combination_optimum
+      
+      new_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, new_optimum_coefficients[i,combination_selected!=0])
+      
+      surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, combination_optimum))
+      new_surplus[i] <- surplus 
+    } else{
+      new_surplus[i] <- 1000000
+    }
+  }
+
+  results = list("pre_optimum_coefficients" = pre_optimum_coefficients, 
+                 "pre_surplus" = pre_surplus, 
+                 "pre_payback" = pre_payback, 
+                 "new_optimum_coefficients" = new_optimum_coefficients, 
+                 "new_surplus" = new_surplus, 
+                 "new_payback" = new_payback)
+
+  return(results)
+}
+
+
+optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
+  
+  # TODO: understand the criteria of the keepBest = T
+  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
+  
+  pre_optimal_combinations <- optimization_1_betas(n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen, df_cons = df_cons)
+  # not all of the combinations are of the size = n_community_max (some are smaller)
+  
+  # TODO: separate the combinations according to the number n_community_per_combination
+  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
+  
+  # checking:
+  # n_community_per_combination[n_community_per_combination_order]
+  
+  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
+  n_community_vector = rowSums(pre_optimal_combinations)
+  
+  # will calculate everything for one day
+  # coefficients will be a matrix of dim = 24*n_community:
+  # will do a for loop to iterate for all the "types of days"
+  
+
+  
+  # hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
+  # pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
+  
+  # checking:
+  # colSums(pre_optimal_combinations)
+  # nrow(pre_optimal_combinations)
+  # hist(as.numeric(lapply(X = surplus, FUN = sum)))
+  # sum(df_gen)
+  
+  # new_optimum_coefficients = pre_optimum_coefficients
+  new_surplus = rep(0, nrow(pre_optimal_combinations))
+  new_optimum_coefficients = list()
+  new_payback = list()
+  
+  
+  # pre_payback = pre_optimum_coefficients
+  
+  for (i in 1:nrow(pre_optimal_combinations)) {
+    
+    combination_selected = pre_optimal_combinations[i, ]
+    df_cons_selected = df_cons[,combination_selected==1]
+    individual_investment_max = individual_investment[combination_selected==1]  
+    
+
+    
+    # surplus_min_x = sum(calculate_surplus_hourly_individual(df_gen, df_cons, coefficients))
+    
+    # if (sum(combination_selected) == n_community &
+    #     sum(individual_investment_max) > global_investment) {
+    
+    if (sum(individual_investment_max) > global_investment) {
+      
+      n_community = as.numeric(n_community_vector[i])
+      
+      # x just selects the users, no need to calculate the optimum combination here
+      # I think calculating the coeffs should be inside the "inside GA"
+      # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+      
+      individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+      
+      # just checking
+      # if (any(individual_investment_selected > individual_investment_max)){
+      #   print("fail")
+      # }
+      
+      # pre_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, pre_optimum_coefficients[i,combination_selected!=0])
+      
+
+      # TODO:
+      # for (d in day) {
+      #   
+      # }
+      d = 0
+      
+      sunny_hours = which(df_gen != 0)
+      df_gen_day = df_gen[sunny_hours + d*24]
+      df_cons_selected_day = df_cons_selected[sunny_hours + d*24,]
+      
+      n_sunny_hours = length(sunny_hours)      
+      
+      
+      optim_results <- ga(type = "real-valued", fitness = fitness_2_betas, 
+                          lower = array(0, dim = n_community*n_sunny_hours), upper = array(1, dim = n_community*n_sunny_hours),  
+                          df_gen_day = df_gen_day, df_cons_selected_day = df_cons_selected_day, combination = combination_selected, 
+                          individual_investment = individual_investment_selected,
+                          popSize = 100, maxiter = 5, run = 5)
+      
+      coefficients_optimum <- optim_results@solution[1, ]
+      # coefficients_optimum = coefficients_optimum/sum(coefficients_optimum)
+      
+      coefficients_optimum = matrix(data = coefficients_optimum, nrow = n_sunny_hours, byrow = T)
+      coefficients_optimum = coefficients_optimum/rowSums(coefficients_optimum)
+      
+      combination_optimum = matrix(1, nrow = nrow(coefficients_optimum)) %*% combination_selected
+      combination_optimum[combination_optimum!=0] = coefficients_optimum
+      
+      new_optimum_coefficients[[i]] = coefficients_optimum
+
+      
+      # TODO: working on saving this!
+      # new_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, new_optimum_coefficients[i,combination_selected!=0])
+      # 
+      # surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, combination_optimum))
+      # new_surplus[i] <- surplus 
+    } else{
+      new_surplus[i] <- 1000000
+    }
   }
   
-  return(df_day_1)
+  results = list("pre_optimum_coefficients" = pre_optimum_coefficients, 
+                 "pre_surplus" = pre_surplus, 
+                 "pre_payback" = pre_payback, 
+                 "new_optimum_coefficients" = new_optimum_coefficients, 
+                 "new_surplus" = new_surplus, 
+                 "new_payback" = new_payback)
+  
+  return(results)
+}
+
+
+optimization_1_betas <- function(n_community, n_binary_rep, df_gen, df_cons){
+  
+  optim_results <- ga(type = "binary", fitness = fitness_1, 
+                      nBits = n_binary_rep*n_community,
+                      n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = 200, maxiter = 100, run = 50,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+                      keepBest = T,
+                      pmutation = 0.3 
+  )
+  # TODO: understand: popSize should be simmilar to the combinatorial??
+  # look for: relation between popSize and dimension of the space (number of possible combinations) 
+  # TODO: work a better crossover, now is being done a uCrossover in "pieces"
+  
+  # TODO: check how are the bestSolutions find
+  x_solution = optim_results@bestSol
+  
+  x_solution = as.vector(unlist(x_solution))
+  n_solutions = length(x_solution)/(n_binary_rep * n_community)
+  factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
+  solutions = t(as.data.frame(split(x = x_solution, f = factor)))
+  
+  solutions = solutions[!duplicated(solutions), ]
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep))
+  
+  return(combinations)
+}
+
+
+fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
+  
+  # tests -> lower number, bigger number:
+  # x = rep(0, n_binary_rep*n_community)
+  # x = rep(1, n_binary_rep*n_community)
+  
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep)
+  
+  # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+  # surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, optimum_coefficients))
+  
+  surplus = sum(calculate_surplus_hourly_community(df_gen, df_cons, combination))
+  score <- surplus
+  
+  return(-score)
+}
+
+
+fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment){
+  
+  # n_community = 4, amount of participans forming part of the community
+  # vector of length N (in this case N = 16, amount of participants
+  # for example
+  # x = runif(n_community*n_sunny_hours, 0, 1)
+  
+  n_sunny_hours = nrow(df_cons_selected_day)
+  
+  # TODO:
+  coefficients_x = matrix(data = x, nrow = n_sunny_hours, byrow = T)
+  coefficients_x = coefficients_x/rowSums(coefficients_x)
+
+  
+  # coefficients = calculate_coefficients_beta(df_gen = df_gen, df_cons = df_cons, combination = combination_selected)
+
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, coefficients_x)
+  
+  # checking:
+  # identical(rowSums(df_gen_assigned), df_gen)   
+
+  surplus_x <- df_gen_assigned - df_cons_selected_day
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  cost_surplus = sum(surplus_x)
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_day)
+  
+  grid_x = df_cons_selected_day - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  # checking: this should be zero
+  # max(abs(-as.matrix(df_cons_selected) + as.matrix(grid_x) + as.matrix(df_gen_assigned) - as.matrix(surplus_x)))
+  
+  # TODO: change the "sale_price * coefficients_x * sum(surplus_x)" 
+  # this makes no sense with hourly betas
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * colSums(surplus_x)
+  
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  payback_years = individual_investment / profit_one_year 
+  
+  # TODO: payback ideal?
+  payback_ideal = 4
+  
+  # TODO:
+  cost_payback = sum(exp(payback_years - payback_ideal))
+  # TODO: add something like this
+  cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  score <- cost_surplus * cost_payback
+  # score <- 1
+  
+  return(-score)
+}
+
+
+
+calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
+  not_selected_cons = (combination == 0) 
+  df_cons[, not_selected_cons] = 0
+  
+  df_cons_community = rowSums(df_cons)
+  
+  community_hourly_surplus <- df_gen - df_cons_community
+  community_hourly_surplus[community_hourly_surplus < 0] = 0
+  
+  return(community_hourly_surplus)
+}
+
+
+calculate_gen_assigned_betas <- function(df_gen_day, matrix_coefficients){
+  df_gen = as.data.frame(as.matrix(df_gen_day)%*%matrix(1, ncol = ncol(matrix_coefficients)))
+  df_gen_assigned <- as.data.frame(df_gen * matrix_coefficients)  
+  return(df_gen_assigned)
+}
+
+
+# bee_uCrossover_float_betas <- function(object, parents, n_binary_rep, n_community){
+# 
+#   data = runif(n_community*24*2, 0, 1)
+#       
+#   # data = c(1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+#   parents <- matrix(data = data, nrow = 2, byrow = T)
+#   
+#   parents <- object@population[parents,,drop = FALSE]
+#   u <- unlist(lapply(X = 1:n_community,function(i)rep(runif(1), 24)))
+#   children <- parents
+#   children[1:2, u > 0.5] <- children[2:1, u > 0.5]
+#   out <- list(children = children, fitness = rep(NA,2))  
+#   
+#   return(out)
+# }
+
+
+optimization_1 <- function(n_community, n_binary_rep, df_gen, df_cons){
+    
+  optim_results <- ga(type = "binary", fitness = fitness_1, 
+                      nBits = n_binary_rep*n_community,
+                      n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = 200, maxiter = 100, run = 50,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+                      keepBest = T,
+                      pmutation = 0.3 
+                      )
+  # TODO: understand: popSize should be simmilar to the combinatorial??
+  # look for: relation between popSize and dimension of the space (number of possible combinations) 
+  # TODO: work a better crossover, now is being done a uCrossover in "pieces"
+  
+  # TODO: check how are the bestSolutions find
+  x_solution = optim_results@bestSol
+  
+  x_solution = as.vector(unlist(x_solution))
+  n_solutions = length(x_solution)/(n_binary_rep * n_community)
+  factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
+  solutions = t(as.data.frame(split(x = x_solution, f = factor)))
+  
+  solutions = solutions[!duplicated(solutions), ]
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep))
+  
+  return(combinations)
+}
+
+
+# TODO: study more about crossovers and elaborate a better one
+bee_uCrossover_binary <- function(object, parents, n_binary_rep, n_community){
+  
+  # data = c(1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+  # parents <- matrix(data = data, ncol = n_community*n_binary_rep)
+  
+  parents <- object@population[parents,,drop = FALSE]
+  u <- unlist(lapply(X = 1:n_community,function(i)rep(runif(1), n_binary_rep)))
+  children <- parents
+  children[1:2, u > 0.5] <- children[2:1, u > 0.5]
+  out <- list(children = children, fitness = rep(NA,2))  
+  
+  return(out)
+}
+
+
+############################# fitness #############################
+
+
+fitness_1 <- function(x, n_community, n_binary_rep, df_gen, df_cons){
+  
+  # tests -> lower number, bigger number:
+  # x = rep(0, n_binary_rep*n_community)
+  # x = rep(1, n_binary_rep*n_community)
+  
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep)
+  
+  optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+  
+  surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, optimum_coefficients))
+  score <- surplus
+  
+  return(-score)
+}
+
+
+fitness_2 <- function(x, combination, df_gen, df_cons_selected, individual_investment){
+  # n_community = 4, amount of participans forming part of the community
+  # vector of length N (in this case N = 16, amount of participants
+  # for example
+  # x = c(0.2, 0.6, 0.5, 0.3) 
+  
+  coefficients_x = x/sum(x)
+  df_gen_assigned = calculate_gen_assigned(df_gen, coefficients_x)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  cost_surplus = sum(surplus_x)
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected)
+  
+  grid_x = df_cons_selected - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  # checking: this should be zero
+  # max(abs(-as.matrix(df_cons_selected) + as.matrix(grid_x) + as.matrix(df_gen_assigned) - as.matrix(surplus_x)))
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * coefficients_x * sum(surplus_x)
+  
+  profit_period = cost_old - cost_sun
+  length_period = nrow(df_cons_selected)
+  profit_one_year = profit_period * 24*360 / length_period
+  
+  payback_years = individual_investment / profit_one_year 
+  
+  # TODO: payback ideal?
+  payback_ideal = 4
+  
+  # TODO:
+  cost_payback = sum(exp(payback_years - payback_ideal))
+  # TODO: add something like this
+  cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  score <- cost_surplus * cost_payback
+  # score <- 1
+
+  return(-score)
+}
+
+
+############################# plot ############################## 
+
+
+plot_initial <- function(df){
+  
+  df_plot <- df 
+  colnames(df)[2] <- "PV_generation" 
+  
+  df_plot <- melt(data = df_plot, id.vars = "time", variable.name = "series")
+  # df_sum <- data.frame("time" = df$time,
+  #                      "consumption_sum" = rowSums(df[, c(2, 3, 4, 6)]))
+  p <- ggplot() + 
+    geom_line(aes(df_plot$time, df_plot$value , color = df_plot$series)) +
+    # geom_area(aes(x = df_sum$time, y = df_sum$consumption_sum), alpha = 0.5) +
+    labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
+  
+  return(p)
+}
+
+
+plot_best_combination <- function(best_combination, iteration){
+  
+  optimum_coefficients = as.numeric(best_combination$optimum_coefficients)
+  p <- ggplot() +
+    geom_bar(aes(x = 1:length(optimum_coefficients), y = optimum_coefficients), alpha = 0.5, width = 1, stat = "identity") +
+    scale_x_continuous(breaks = 1:length(optimum_coefficients)) 
+  ggsave(filename = paste0("graphs/optimum_coefficients_iteration",iteration), plot = p, device = "pdf", width = 6, height = 3)
+  
+  optimum_payback = as.numeric(best_combination$payback)
+  p <- ggplot() +
+    geom_bar(aes(x = 1:length(optimum_payback), y = optimum_payback), alpha = 0.5, width = 1, stat = "identity") +
+    scale_x_continuous(breaks = 1:length(optimum_payback)) 
+  ggsave(filename = paste0("graphs/optimum_payback_iteration",iteration), plot = p, device = "pdf", width = 6, height = 3)
+}
+
+
+plot_solar_consumption_daily_mean <- function(df_gen, df_gen_assigned, time){
+  
+  m = unique(month(time))
+  
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+  
+  df_gen$hour = hour(time) 
+  df_solar_consumption$hour = hour(time)
+  
+  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  
+  df_plot_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
+    geom_area(aes(x = df_plot_solar_consumption_mean[, "hour"], y = df_plot_solar_consumption_mean[, "value"], fill = df_plot_solar_consumption_mean[,"series"]), alpha = 0.5) +
+    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+  
+  return(p)
+}
+
+
+plot_disaggregated_daily_mean_per_user <- function(df_gen_assigned, df_cons_selected, time){
+  
+  # calculate solar consumption and surplus
+  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # add hour column
+  solar_consumption$hour = hour(time)
+  solar_surplus$hour = hour(time)
+  grid$hour = hour(time)
+  
+  # aggregate
+  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+  
+  # to calculate the self consumption and surplus 
+  df_cons_selected$hour = hour(time)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
+  
+  df_gen_assigned$hour = hour(time)
+  df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
+  
+  daily_hour <- solar_surplus_mean$hour
+  
+  plots_list = list()
+  
+  for (user in 1:(ncol(df_cons_selected)-1)) {
+    
+    solar_consumption_mean_user <- solar_consumption_mean[, c(1+user)]
+    grid_mean_user <- grid_mean[, c(1+user)]
+    solar_surplus_mean_user <- solar_surplus_mean[, c(1+user)]
+    
+    df_plot <- data.frame("hour" = daily_hour,
+                          "Solar_surplus" = solar_surplus_mean_user,
+                          "Solar_consumption" = solar_consumption_mean_user,
+                          "Grid_consumption" = grid_mean_user
+    )
+    
+    df_plot = melt(df_plot, id.vars = "hour")
+    
+    # TODO: understand which of the 2 is the correct one
+    # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+    self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+    
+    surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, user+1])  
+    
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, user+1])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("User ", user,": self consumption = ", round(self_consumption_percentage_mean, digits = 2), " & surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
+    
+    ggsave(filename = paste0("graphs/user_",user), plot = p, device = "pdf", width = 5, height = 3)
+    
+  }
+  return()
+}
+
+
+plot_disaggregated_daily_mean_community <- function(df_gen_assigned, df_cons_selected, time){
+  
+  # calculate solar consumption and surplus
+  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # add hour column
+  solar_consumption$hour = hour(time)
+  solar_surplus$hour = hour(time)
+  grid$hour = hour(time)
+  
+  # aggregate
+  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+  
+  # to calculate the self consumption and surplus 
+  df_cons_selected$hour = hour(time)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
+  
+  df_gen_assigned$hour = hour(time)
+  df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
+  
+  daily_hour <- solar_surplus_mean$hour
+  
+  ##
+  
+  n_community = ncol(df_gen_assigned)
+  
+  solar_consumption_mean_community <- rowSums(solar_consumption_mean[, 2:(n_community+1)])
+  grid_mean_community <- rowSums(grid_mean[, 2:(n_community+1)])  
+  solar_surplus_mean_community <- rowSums(solar_surplus_mean[, 2:(n_community+1)])  
+  
+  df_plot <- data.frame("hour" = daily_hour,
+                        "Solar_surplus" = solar_surplus_mean_community,
+                        "Solar_consumption" = solar_consumption_mean_community,
+                        "Grid_consumption" = grid_mean_community
+  )
+  
+  df_plot = melt(df_plot, id.vars = "hour")
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  
+  self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean)
+  
+  surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, user+1])  
+  surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean)  
+  
+  index_order = order(colSums(df_cons_selected_mean[2:5]))
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[2]] + df_cons_selected_mean[, 1+index_order[2]])) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[3]] + df_cons_selected_mean[, 1+index_order[2]] + df_cons_selected_mean[, 1+index_order[3]] )) +
+    geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[4]] + df_cons_selected_mean[, 1+index_order[2]] + df_cons_selected_mean[, 1+index_order[3]] + df_cons_selected_mean[, 1+index_order[4]])) +
+    geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+    grids() + 
+    labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
+  
+  ggsave(filename = paste0("graphs/community"), plot = p, device = "pdf")
+  
+  return()
+}
+
+
+plot_economic_comparison <- function(df_gen, optimum_combination, df_cons_selected){
+  
+  df_gen_assigned_selected = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
+  solar_consumption = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  grid = df_cons_selected - df_gen_assigned_selected
+  grid[grid < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+  
+  ###
+  
+  n_community = length(optimum_combination)
+  combination_non_optimum = rep(1/n_community,n_community)
+  
+  # checking:
+  # optimum_combination - combination_non_optimum
+  
+  df_gen_assigned_selected_non_optimum = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
+  solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
+  grid_non_optimum = df_cons_selected - df_gen_assigned_selected_non_optimum
+  grid_non_optimum[grid_non_optimum < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+  
+  ###
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected)
+  cost_sun = purchase_price*colSums(grid) - sale_price * optimum_combination * sum(solar_surplus)
+  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * combination_non_optimum * sum(solar_surplus_non_optimum)
+  
+  length_period = nrow(df_cons_selected)
+  cost_old_one_year = cost_old * 24*360 / length_period
+  cost_sun_one_year = cost_sun * 24*360 / length_period
+  cost_sun_one_year_non_optimum = cost_sun_non_optimum * 24*360 / length_period
+  
+  cost_old_20_years = cost_old_one_year * 20
+  cost_sun_20_years = cost_sun_one_year * 20
+  cost_sun_non_optimum_one_year = cost_sun_one_year_non_optimum * 20
+  
+  # bar graph: what would you have paid in the following 20 years?
+  # .with the optimum community
+  # .with the non optimum community
+  # .without the community
+  
+  costs_comparison = as.data.frame(rbind(cost_old_20_years, cost_sun_20_years, cost_sun_non_optimum_one_year))
+  costs_comparison$names = rownames(costs_comparison)
+  costs_comparison = melt(data = costs_comparison, id.vars = "names") 
+       
+  p <- ggplot() +
+    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) +
+    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_20_years), alpha = 0.5, width = 1, stat = "identity") +
+    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_non_optimum_one_year), alpha = 0.5, width = 1, stat = "identity") +
+    # scale_x_continuous(breaks = 1:nrow(costs_comparison)) 
+  ggsave(filename = paste0("costs_comparison"), plot = p, device = "pdf")
+}
+
+
+plot_optimization1_vs_optimization2 <- function(optimal_combination_using_2_GAs){
+  
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+  
+  index = order(new_surplus, decreasing = F)[order(new_surplus, decreasing = F) %in% which(new_surplus < 1000000)]
+  # index = order(new_surplus, decreasing = F)[order(new_surplus, decreasing = F)]
+  
+  new_surplus = new_surplus[index]
+  new_payback = new_payback[index, ]
+  
+  payback_ideal = 4
+  cost_payback = rowSums(exp(new_payback - payback_ideal))
+  
+  # TODO: study carefully this graph, does this make sense?
+  p <- ggplot() + geom_point(aes(x = 1:length(new_surplus), y = new_surplus))
+  ggsave(filename = "graphs/new_surplus.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  p <- ggplot() + geom_point(aes(x = 1:length(cost_payback), y = cost_payback))
+  ggsave(filename = "graphs/new_payback.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  # p <- ggplot() + geom_point(aes(x = cost_payback, y = new_surplus))
+  p <- ggplot() + geom_point(aes(x = new_surplus, y = cost_payback))
+  ggsave(filename = "graphs/new_surplus_vs_payback.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  
+  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  
+  index_pre = order(pre_surplus, decreasing = F)[order(pre_surplus, decreasing = F) %in% which(pre_surplus < 1000000)]
+  # index_pre = order(pre_surplus, decreasing = F)[order(pre_surplus, decreasing = F)]
+  
+  pre_surplus = pre_surplus[index_pre]
+  pre_payback = pre_payback[index_pre, ]
+  
+  pre_cost_payback = rowSums(exp(pre_payback - payback_ideal))
+  
+  # TODO: study carefully this graph, does this make sense?
+  p <- ggplot() + geom_point(aes(x = 1:length(pre_surplus), y = pre_surplus))
+  ggsave(filename = "graphs/pre_surplus.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  p <- ggplot() + geom_point(aes(x = 1:length(pre_cost_payback), y = pre_cost_payback))
+  ggsave(filename = "graphs/pre_payback.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  # p <- ggplot() + geom_point(aes(x = pre_cost_payback, y = pre_surplus))
+  p <- ggplot() + geom_point(aes(x = pre_surplus, y = pre_cost_payback))
+  ggsave(filename = "graphs/pre_surplus_vs_payback.pdf", plot = p, device = "pdf", width = 5, height = 3)
+  
+  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  
+  pre_surplus = pre_surplus[index]
+  pre_cost_payback = pre_cost_payback[index] 
+  surplus_added = new_surplus - pre_surplus 
+  p <- ggplot() + geom_point(aes(x = pre_surplus, y = new_surplus))
+  p <- ggplot() + geom_point(aes(x = pre_surplus, y = surplus_added))
+  p <- ggplot() + geom_point(aes(x = pre_cost_payback, y = surplus_added))
+  p <- ggplot() + geom_point(aes(x = cost_payback, y = surplus_added))
+  p <- ggplot() + geom_point(aes(x = surplus_added, y = cost_payback))
+  
+  p <- ggplot() + geom_point(aes(x = pre_payback, y = cost_payback))
+  
+  return()
+}
+
+
+############################# AUX - main #############################
+
+
+calculate_n_community_max <- function(generation = df_gen$gen_1, df_cons, time = df_month_1$time){
+  
+  # minimum self consumption: 0.2?
+  
+  # TODO: a some small problem when the peak is a platau
+  
+  # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
+  # max_insolation_hours = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = which.max)
+  
+  first_derivative = sign(diff(generation))
+  # max_insolation_hours = which(diff(a) == -2)
+  
+  peak_insolation_hours = (diff(first_derivative) == -2)
+  # TODO: this makes sense if we are studing only one month (change the 2 for a 3 is we are studing one year)
+  high_insolation_hours = max(generation, na.rm = T)/2 < generation  
+  
+  # completing borders:
+  peak_insolation_hours = c(T, peak_insolation_hours, T)
+  max_insolation_hours = peak_insolation_hours & high_insolation_hours
+  
+  # checking:
+  # peaks = generation
+  # peaks[!max_insolation_hours] = NA
+  # plot(generation, type = "l")
+  # points(peaks)
+  
+  n_community_max = 1 + ceiling(1/mean(colMeans(df_cons[max_insolation_hours, ] / generation[max_insolation_hours])))
+  
+  return(n_community_max)
+}
+
+
+select_best_combinations <- function(optimal_combination_using_2_GAs){
+  
+  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+  
+  index_order = order(new_surplus, decreasing = F)
+  
+  optimum_coefficients = new_optimum_coefficients[index_order[1],]
+  surplus = new_surplus[index_order[1]]
+  payback = new_payback[index_order[1], ]
+  
+  return(list("optimum_coefficients" = optimum_coefficients,
+              "surplus" = surplus, 
+              "payback" = payback))
+}  
+
+
+############################# AUX - operative #############################
+
+
+calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep){
+  
+  combination = rep(0, ncol(df_cons))
+  
+  for (j in 1:n_community) {
+    user = binary2decimal(x[((j-1)*n_binary_rep + 1):(j*n_binary_rep)]) + 1  
+    # print(user)
+    combination[user] = 1
+  }
+  return(combination)
+}
+
+
+calculate_coefficients <- function(df_gen, df_cons, combination){
+  
+  individual_hourly_surplus = calculate_surplus_hourly_individual(df_gen, df_cons, combination)
+  # TODO: check with pencil and paper that this is the correct way to calculate the coefficients
+  # this is the same as taking the mean of the hourly coefficients but, 
+  # I would like to take the coefficient of the hour(s) of maximum generation
+  surplus = sum(individual_hourly_surplus)
+  optimum_coefficients = surplus/colSums(individual_hourly_surplus)
+  optimum_coefficients[is.infinite(optimum_coefficients)] = NA
+  optimum_coefficients = optimum_coefficients/sum(optimum_coefficients, na.rm = T)
+  optimum_coefficients[is.na(optimum_coefficients)] = 0
+  return(optimum_coefficients)
+}
+
+
+calculate_surplus_hourly_individual <- function(df_gen, df_cons, combination){
+  not_selected_cons = (combination == 0) 
+  df_cons[, not_selected_cons] = 0
+  
+  df_gen_assigned <- calculate_gen_assigned(df_gen, combination)
+  individual_hourly_surplus <- df_gen_assigned - df_cons
+  individual_hourly_surplus[individual_hourly_surplus < 0] = 0
+  
+  # hourly_surplus <- rowSums(individual_hourly_surplus)
+  
+  # cons_total = rowSums(df_cons)
+  # hourly_surplus = df_gen - cons_total
+  # hourly_surplus[hourly_surplus < 0] = 0
+  
+  return(individual_hourly_surplus)
 }
 
 
@@ -47,520 +976,53 @@ calculate_gen_assigned <- function(df_gen, combination){
 }
 
 
-calculate_surplus <- function(df_gen, df_cons, combination){
-  not_selected_cons = (combination == 0) 
-  df_cons[, not_selected_cons] = 0
+calculate_individual_investment <- function(combination, global_investment, individual_investment_max){
   
-  # df_gen_assigned <- calculate_gen_assigned(df_gen, combination)
-  # individual_hourly_surplus <- df_gen_assigned - df_cons
-  # hourly_surplus <- rowSums(individual_hourly_surplus)
-  # hourly_surplus[hourly_surplus < 0] = 0
-  
-  cons_total = rowSums(df_cons)
-  hourly_surplus = df_gen - cons_total
-  hourly_surplus[hourly_surplus < 0] = 0
-
-  return(hourly_surplus)
-}
-
-calculate_params_period <- function(n_periods){
-  n_hours = floor(24/n_periods)
-  init = (array(0:(n_periods-1)) * n_hours) + 1
-  end = (array(1:(n_periods)) * n_hours) 
-  return(data.frame(init, end))  
-}
-
-############################################################
-# GA functions
-
-calculate_combination_GA <- function(x, n_community){
-  selected = order(x, decreasing = T)[1:n_community]
-  combination = array(0, length(x))
-  combination[selected] = x[1:n_community]
-  total = sum(combination)
-  combination = combination/total
-  return(combination)    
-}
-
-fitness <- function(x, n_community, df_gen, df_cons){
-  
-  # n_community = 2, amount of participans forming part of the community
-  # vector of length N (in this case N = 4, amount of participants
-  # for example
-  # x = c(0.2, 0.6, 0.5, 0.3) 
-  
-  combination <- calculate_combination_GA(x, n_community)
-  # hourly_surplus <- calculate_surplus(df_gen, df_cons, combination)  
-  hourly_surplus <- calculate_surplus_individual(df_gen, df_cons, combination)
-
-  score <- sum(hourly_surplus)  
-  
-  return(-score)
+  individual_investment = individual_investment_max * ( global_investment/sum(individual_investment_max) )  
+  return(individual_investment)  
 }
 
 
-optimize_repartition_GA_real_valued <- function(n_periods, periods, n_community, df_gen, df_cons){
+calculate_payback <- function(df_cons_selected, df_gen, individual_investment, coefficients_x){
   
-  # initialize df for results
-  df_optimal_combination <- df_cons[0,]
+  df_gen_assigned = calculate_gen_assigned(df_gen, coefficients_x)
   
-  for (j in 1:n_periods) {
-    
-    init = periods$init[j] 
-    end = periods$end[j]
-    
-    df_gen_period = df_gen[init:end, ]
-    df_cons_period = df_cons[init:end, ]
-    if (sum(df_gen_period) > 0)  {
-      optim_results <- ga(type = "real-valued", fitness = fitness, 
-                          lower = array(0, dim = ncol(df_cons)), upper = array(1, dim = ncol(df_cons)),  
-                          n_community = n_community, df_gen = df_gen_period, df_cons = df_cons_period, 
-                          popSize = 100, maxiter = 200, run = 100)
-      
-      # the algorithm gives as a result all the local minimums.. some criateria to select one of these minms?
-      solution <- optim_results@solution[1, ]
-      optimal_combination <- calculate_combination_GA(solution, n_community)
-    } else{
-      optimal_combination = array(0, dim = ncol(df_cons))
-    }
-    df_optimal_combination <- rbind(df_optimal_combination, optimal_combination) 
-  }
   
-  colnames(df_optimal_combination) <- colnames(df_cons)
-  return(df_optimal_combination)
+  surplus_x <- df_gen_assigned - df_cons_selected
+  surplus_x[surplus_x < 0] = 0
+  
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected)
+  
+  grid_x = df_cons_selected - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  # checking: this should be zero
+  # max(abs(-as.matrix(df_cons_selected) + as.matrix(grid_x) + as.matrix(df_gen_assigned) - as.matrix(surplus_x)))
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * coefficients_x * sum(surplus_x)
+  
+  profit_period = cost_old - cost_sun
+  length_period = nrow(df_cons_selected)
+  profit_one_year = profit_period * 24*360 / length_period
+  
+  payback_years = individual_investment / profit_one_year 
+  
+  return(payback_years)
 }
 
 
-# optimize_repartition_GA_binary <- function(n_periods, periods, n_community, df_gen, df_cons){
-#   
-#   # initialize df for results
-#   df_optimal_combination <- df_cons[0,]
-#   
-#   for (j in 1:n_periods) {
-#     
-#     init = periods$init[j] 
-#     end = periods$end[j]
-#     
-#     df_gen_period = df_gen[init:end, ]
-#     df_cons_period = df_cons[init:end, ]
-#     if (sum(df_gen_period) > 0)  {
-#       
-#       min_repartition = 0
-#       max_repartition = 95
-#       
-#       features <- list("0" = list(levels = c(as.character(seq(from = min_repartition, to = max_repartition, by = 1)), NA), class = "discrete"),
-#                        "1" = list(levels = c(as.character(seq(from = min_repartition, to = max_repartition, by = 1)), NA), class = "discrete"),
-#                        "2" = list(levels = c(as.character(seq(from = min_repartition, to = max_repartition, by = 1)), NA), class = "discrete"),
-#                        "3" = list(levels = c(as.character(seq(from = min_repartition, to = max_repartition, by = 1)), NA), class = "discrete")
-#       )
-# 
-#       nBits = sum(mapply(function(x) { nchar(toBin(x)) }, mapply(function(i){length(i[["levels"]])},features)))
-#       class_per_feature = mapply(function(i){i[['class']]},features)
-#       nclasses_per_feature = mapply(function(i){length(i[["levels"]])},features)
-#       levels_per_feature = lapply(function(i){i[["levels"]]}, X = features)
-#       names_per_feature = names(features)
-#       
-#       
-#       optim_results <- ga(
-#         type = "binary",
-#         fitness = optimizer,
-#         nBits = sum(mapply(function(x) { nchar(toBin(x)) }, mapply(function(i){length(i[["levels"]])},features))),
-#         class_per_feature = mapply(function(i){i[['class']]},features),
-#         nclasses_per_feature = mapply(function(i){length(i[["levels"]])},features),
-#         levels_per_feature = lapply(function(i){i[["levels"]]}, X = features), 
-#         names_per_feature = names(features),
-#         # df_price = df_price,  
-#         selection = gabin_tourSelection,
-#         df_gen = df_gen_period, 
-#         df_cons = df_cons_period,
-#         # suggestions = suggestions,
-#         keepBest = TRUE,
-#         popSize = 64,
-#         maxiter = 20,
-#         monitor = gaMonitor,
-#         parallel = 16,
-#         elitism = 0.08,
-#         pmutation = 0.05
-#       )
-#       
-#       optim_results <- as.numeric(decodeValueFromBin(binary_representation = optim_results@solution[1, ],
-#                                                             class_per_feature = mapply(function(i){i[['class']]},features),
-#                                                             nclasses_per_feature = mapply(function(i){length(i[["levels"]])},features),
-#                                                             levels_per_feature = lapply(function(i){i[["levels"]]}, X = features)
-#       ))
-#       
-#       
-#       # the algorithm gives as a result all the local minimums.. some criateria to select one of these minms?
-#       solution <- optim_results@solution[1, ]
-#       optimal_combination <- calculate_combination_GA(solution, n_community)
-#     } else{
-#       optimal_combination = array(0, dim = ncol(df_cons))
-#     }
-#     df_optimal_combination <- rbind(df_optimal_combination, optimal_combination) 
-#   }
-#   
-#   colnames(df_optimal_combination) <- colnames(df_cons)
-#   return(df_optimal_combination)
-# }
-# 
-# decodeValueFromBin <- function(binary_representation, class_per_feature, nclasses_per_feature, 
-#                                levels_per_feature = NULL, min_per_feature = NULL, max_per_feature = NULL){
-#   
-#   bitOrders <- mapply(function(x) { nchar(toBin(x)) }, nclasses_per_feature)
-#   #binary_representation <- X
-#   binary_representation <- split(binary_representation, rep.int(seq.int(bitOrders), times = bitOrders))
-#   orders <- sapply(binary_representation, function(x) { binary2decimal(gray2binary(x)) })
-#   orders <- mapply(function(x){min(orders[x],nclasses_per_feature[x])},1:length(orders))
-#   orders <- mapply(
-#     function(x){
-#       switch(class_per_feature[x],
-#              "discrete"= levels_per_feature[[x]][orders[x]+1],
-#              "int"= floor(seq(min_per_feature[x],max_per_feature[x],
-#                               by=if(nclasses_per_feature[x]>0){
-#                                 (max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])
-#                               }else{1}
-#              )[orders[x]+1]),
-#              "float"= seq(min_per_feature[x],max_per_feature[x],
-#                           by=if(nclasses_per_feature[x]>0){
-#                             (max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])
-#                           }else{1})[orders[x]+1]
-#       )
-#     }
-#     ,1:length(orders))
-#   return(unname(orders))
-# }
-# 
-# decodeBinFromValue <- function(values, class_per_feature, nclasses_per_feature,
-#                                levels_per_feature = NULL, min_per_feature = NULL, max_per_feature = NULL){
-#   # values=c(0,400)
-#   # class_per_feature=c("int","int")
-#   # nclasses_per_feature=c(4,5)
-#   # min_per_feature=c(0,0)
-#   # max_per_feature=c(400,500)
-#   #
-#   
-#   values <- mapply(
-#     function(x){
-#       
-#       switch(class_per_feature[x],
-#              "discrete"= which(levels_per_feature[[x]] %in% values[x])-1,
-#              "int"= which(seq(min_per_feature[x],max_per_feature[x],
-#                               by=(max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])) %in% values[x])-1,
-#              "float"= which(seq(min_per_feature[x],max_per_feature[x],
-#                                 by=(max_per_feature[x]-min_per_feature[x])/(nclasses_per_feature[x])) %in% values[x])-1
-#       )
-#     }
-#     ,1:length(values))
-#   
-#   bitOrders <- mapply(function(x) { nchar(toBin(x)) }, nclasses_per_feature)
-#   binary_representation <- unlist(c(sapply(1:length(values), FUN=function(x) { binary2gray(decimal2binary(values[x],bitOrders[x])) })))
-#   
-#   return(binary_representation)
-# }
-# 
-# toBin<-function(x){ as.integer(paste(rev( as.integer(intToBits(x))),collapse="")) }
+############################# AUX - plot #############################
 
-############################################################
 
-initial_plot <- function(df){
+calculate_solar_consumption <- function(df_gen_assigned, df_cons_selected){
+  surplus <- df_gen_assigned - df_cons_selected
+  surplus[surplus < 0] = 0
   
-  df_plot <- df 
-  colnames(df)[2] <- "PV_generation" 
-  
-  df_plot <- melt(data = df_plot, id.vars = "time", variable.name = "series")
-  df_sum <- data.frame("time" = df$time,
-                       "consumption_sum" = rowSums(df[, c(2, 3, 4, 6)]))
-  p <- ggplot() + 
-    geom_line(aes(hour(df_plot$time), df_plot$value , color = df_plot$series)) +
-    geom_area(aes(x = hour(df_sum$time), y = df_sum$consumption_sum), alpha = 0.5) +
-    labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
-  
-  return(p)
+  df_solar_consumption = df_gen_assigned - surplus  
+  return(df_solar_consumption)
 }
-
-
-
-plot_assignation <- function(df_gen, df_gen_assigned){
-  
-  df_plot_gen_assigned <- melt(data = df_gen_assigned, variable.name = "series")
-  
-  p <- ggplot() +
-    geom_line(aes(x = 1:24, y = df_gen[, 1])) +
-    geom_area(aes(x = rep(x = 1:24, times = ncol(df_gen_assigned)), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-    # geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
-    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
-  return(p)
-}
-
-
-############################################################
-
-
-# TODO: this only takes into account one generator
-# analytical_solution <- function(df){
-#   
-#   generation = df[, grep(pattern = "gen", x = colnames(df))]
-#   
-#   df_surplus <- data.frame("time" = df[,"time"])
-#   vector_cons <- c(1:(sum(grepl(pattern = "cons", x = colnames(df)))))
-#   
-#   for (i in vector_cons) {
-#     consumption <- df[, paste0("cons_", i)]
-#     surplus <- ifelse(generation - consumption >= 0, generation - consumption, 0)
-#     df_surplus_aux <- data.frame("time" = time,
-#                                  "surplus" = surplus)
-#     colnames(df_surplus_aux)[2] <- paste0("user_",i)
-#     df_surplus <- merge(df_surplus, df_surplus_aux, by = "time")
-#   }
-#   
-#   library("gtools")
-#   df_total_surplus_combinations <- data.frame("time" = df[,"time"])
-#   df_combinations <- as.data.frame(combinations(n = length(vector_cons), r = n_community, vector_cons))
-#   
-#   for (i in 1:nrow(df_combinations)) {
-#     set_users <- df_combinations[i, ] 
-#     total_consumption <- rowSums(df[,grepl(pattern = paste0(set_users, collapse = "|"), x = colnames(df))])  
-#     total_surplus <- ifelse(generation - total_consumption >= 0, generation - total_consumption, 0)     
-#     df_total_surplus_aux <- data.frame("time" = df$time, 
-#                                        "cons" = total_consumption,
-#                                        "surplus" = total_surplus)
-#     name <- paste(set_users, collapse = "_")
-#     colnames(df_total_surplus_aux)[2] <- paste0("cons_", name)
-#     colnames(df_total_surplus_aux)[3] <- paste0("surplus_", name)
-#     df_total_surplus_combinations <- merge(df_total_surplus_combinations, df_total_surplus_aux, by = "time")
-#   }
-#   
-#   df_total_surplus_cut <- df_total_surplus_combinations[, grepl(pattern = "*time*|*surplus*", x = colnames(df_total_surplus_combinations))]
-#   daily_surplus <- colSums(x = df_total_surplus_cut[, !(grepl("time", colnames(df_total_surplus_cut)))])
-#   
-#   ordered_daily_surplus <- daily_surplus[order(daily_surplus)]
-#   
-#   optimum_combination <- ordered_daily_surplus[1]
-#   names_optimum_combination <- strsplit(x = as.character(names(optimum_combination)), split = "_")[[1]]
-#   vector_names_optimum_combination <- as.numeric(names_optimum_combination[!grepl(pattern = "surplus", x = names_optimum_combination)])
-#   
-#   df_consumption_optimum_combination <- df[, grep(pattern = paste0(vector_names_optimum_combination, collapse = "|"), x = colnames(df))]
-#   
-#   
-#   ## calculate_coefficients
-#   
-#   # Calculate stat_coeffs (VERSION 1)
-#   # daily_user_consumption <- colSums(x = df_consumption_optimum_combination)
-#   # total_daily_user_consumption <- sum(daily_user_consumption)
-#   # static_coefficients <- daily_user_consumption/total_daily_user_consumption
-#   
-#   # Calculate stat_coeffs (VERSION 2)
-#   df_surplus_only_users <- df_surplus[, !(grepl(pattern = "time", x = colnames(df_surplus)))]
-#   df_sum_surplus <- rowSums(df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))])
-#   static_coefficients_hourly <- 1 - df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))]/df_sum_surplus
-#   static_coefficients_daily <- colSums(static_coefficients_hourly, na.rm = TRUE)/sum(rowSums(static_coefficients_hourly), na.rm = T)
-#   
-#   # now I will calculate the surplus if this HOURLY coefficients where used to assign 
-#   # the energy repartition
-#   df_new_assignation_using_hourly_coeffs <- data.frame("time" = time)
-#   
-#   for (i in vector_names_optimum_combination) {
-#     consumption <- df[, grep(pattern = paste0("cons_", i), x = colnames(df))]
-#     generation_to_assign <- generation * static_coefficients_hourly[, paste0("user_",i)]
-#     generation_assigned <- ifelse(generation_to_assign >= consumption, consumption, generation_to_assign)
-#     generation_assigned[is.na(generation_assigned)] <- 0
-#     consumption_grid <- ifelse(consumption - generation_assigned >= 0, consumption - generation_assigned, 0) 
-#     surplus <- generation - generation_assigned
-#     
-#     df_surplus_aux <- data.frame("time" = time, 
-#                                  "gen_assigned" = generation_assigned,
-#                                  "cons_grid" = consumption_grid, 
-#                                  "surplus" = surplus)
-#     
-#     colnames(df_surplus_aux)[2] <- paste0("gen_assigned_",i) 
-#     colnames(df_surplus_aux)[3] <- paste0("cons_grid_",i) 
-#     colnames(df_surplus_aux)[4] <- paste0("surplus_",i) 
-#     df_new_assignation_using_hourly_coeffs <- merge(df_new_assignation_using_hourly_coeffs, df_surplus_aux, by = "time")
-#   }
-#   
-#   df_gen_assigned <- df_new_assignation_using_hourly_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_hourly_coeffs))]
-#   
-#   
-#   # HARDCODED only to do the plot:
-#   colnames(df_gen_assigned)[2] <- 1 
-#   colnames(df_gen_assigned)[3] <- 4 
-#   
-#   df_gen_assigned_total <- rowSums(x = df_gen_assigned[, !(grepl("time", colnames(df_gen_assigned)))])
-#   surplus_total_hourly <- generation - df_gen_assigned_total
-#   surplus_total_sum_hourly <- sum(surplus_total_hourly)  
-#   print(surplus_total_sum_hourly)
-#   
-#   df_plot_gen_assigned <- melt(data = df_gen_assigned, id.vars = "time", variable.name = "series")
-#   df_plot_generation <- melt(df[, grep(pattern = paste0(c("0","time"), collapse = "|"), x = colnames(df))], id.vars = "time", variable.name = "series")
-#   
-#   p <- ggplot() +
-#     geom_line(aes(x = hour(df_plot_generation$time), y = df_plot_generation$value)) +
-#     geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) + 
-#     labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV dynamic assignation", fill = "User")  
-#   
-#   # now I will calculate the surplus if this DAILY coefficients where used to assign 
-#   # the energy repartition
-#   df_new_assignation_using_daily_coeffs <- data.frame("time" = time)
-#   
-#   for (i in vector_names_optimum_combination) {
-#     consumption <- df[, grep(pattern = paste0("cons_", i), x = colnames(df))]
-#     generation_to_assign <- generation * as.numeric(static_coefficients_daily[paste0("user_",i)])
-#     generation_assigned <- ifelse(generation_to_assign >= consumption, consumption, generation_to_assign)
-#     consumption_grid <- ifelse(consumption - generation_assigned >= 0, consumption - generation_assigned, 0) 
-#     surplus <- generation - generation_assigned
-#     df_surplus_aux <- data.frame("time" = time, 
-#                                  "gen_assigned" = generation_assigned,
-#                                  "cons_grid" = consumption_grid, 
-#                                  "surplus" = surplus)
-#     
-#     colnames(df_surplus_aux)[2] <- paste0("gen_assigned_",i) 
-#     colnames(df_surplus_aux)[3] <- paste0("cons_grid_",i) 
-#     colnames(df_surplus_aux)[4] <- paste0("surplus_",i) 
-#     df_new_assignation_using_daily_coeffs <- merge(df_new_assignation_using_daily_coeffs, df_surplus_aux, by = "time")
-#   }
-#   
-#   df_gen_assigned <- df_new_assignation_using_daily_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_daily_coeffs))]
-#   # HARDCODED:
-#   colnames(df_gen_assigned)[2] <- 1 
-#   colnames(df_gen_assigned)[3] <- 4 
-#   
-#   return(df_gen_assigned)
-# }
-
-
-
-
-
-
-
-
-
-analytical_solution <- function(n_community, df_gen, df_cons){
-  
-  library("gtools")
-  df_combinations <- as.data.frame(combinations(n = length(df_cons), r = n_community))
-  df_combinations$surplus = 0
-  
-  combination = rep(0, length(df_cons))
-  for (i in 1:nrow(df_combinations)) {
-    set_users <- as.numeric(df_combinations[i, c(1:n_community)]) 
-    combination_users = combination
-    combination_users[set_users] = 1/n_community
-    hourly_surplus <- calculate_surplus(df_gen, df_cons, combination = combination_users)
-    total_surplus <- sum(hourly_surplus)
-    df_combinations$surplus[i] = total_surplus 
-  }
-
-  df_combinations <- df_combinations[order(df_combinations$surplus, decreasing = F), ]
-  optimum_combination <- df_combinations[1, ]
-  return(optimum_combination)
-}  
-
-
-calculate_coefficients <- function(optimum_combination, n_community, df_gen, df_cons){
-  
-  ## calculate_coefficients
-  # Calculate stat_coeffs (VERSION 1)
-  # daily_user_consumption <- colSums(x = df_consumption_optimum_combination)
-  # total_daily_user_consumption <- sum(daily_user_consumption)
-  # static_coefficients <- daily_user_consumption/total_daily_user_consumption
-  
-  df_individual <- data.frame("user" = as.numeric(optimum_combination[,(1:n_community)]), 
-                               "surplus" = 0)
-  
-  combination = rep(0, length(df_cons))
-  # Calculate stat_coeffs (VERSION 2)
-  for (i in 1:n_community) {
-    set_users <- as.numeric(optimum_combination[,(1:n_community)]) 
-    combination_users = combination
-    combination_users[set_users[i]] = 1
-    hourly_surplus <- calculate_surplus(df_gen, df_cons, combination = combination_users)
-    total_surplus <- sum(hourly_surplus)
-    df_individual$surplus[i] = total_surplus 
-  }
-  
-  df_individual$optimum_coefficients = sum(df_individual$surplus)/df_individual$surplus
-  df_individual$optimum_coefficients = df_individual$optimum_coefficients/sum(df_individual$optimum_coefficients)
-  return(df_individual)
-}
-  
-
-
-
-#   # static_coefficients_hourly <- 1 - df_surplus_only_users[, grepl(pattern = paste0(as.character(vector_names_optimum_combination), collapse = "|"), x = colnames(df_surplus_only_users))]/df_sum_surplus
-#   # static_coefficients_daily <- colSums(static_coefficients_hourly, na.rm = TRUE)/sum(rowSums(static_coefficients_hourly), na.rm = T)
-#   
-#   # now I will calculate the surplus if this HOURLY coefficients where used to assign 
-#   # the energy repartition
-#   df_new_assignation_using_hourly_coeffs <- data.frame("time" = time)
-#   
-#   for (i in vector_names_optimum_combination) {
-#     consumption <- df[, grep(pattern = paste0("cons_", i), x = colnames(df))]
-#     generation_to_assign <- generation * static_coefficients_hourly[, paste0("user_",i)]
-#     generation_assigned <- ifelse(generation_to_assign >= consumption, consumption, generation_to_assign)
-#     generation_assigned[is.na(generation_assigned)] <- 0
-#     consumption_grid <- ifelse(consumption - generation_assigned >= 0, consumption - generation_assigned, 0) 
-#     surplus <- generation - generation_assigned
-#     
-#     df_surplus_aux <- data.frame("time" = time, 
-#                                  "gen_assigned" = generation_assigned,
-#                                  "cons_grid" = consumption_grid, 
-#                                  "surplus" = surplus)
-#     
-#     colnames(df_surplus_aux)[2] <- paste0("gen_assigned_",i) 
-#     colnames(df_surplus_aux)[3] <- paste0("cons_grid_",i) 
-#     colnames(df_surplus_aux)[4] <- paste0("surplus_",i) 
-#     df_new_assignation_using_hourly_coeffs <- merge(df_new_assignation_using_hourly_coeffs, df_surplus_aux, by = "time")
-#   }
-#   
-#   df_gen_assigned <- df_new_assignation_using_hourly_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_hourly_coeffs))]
-#   
-#   
-#   # HARDCODED only to do the plot:
-#   colnames(df_gen_assigned)[2] <- 1 
-#   colnames(df_gen_assigned)[3] <- 4 
-#   
-#   df_gen_assigned_total <- rowSums(x = df_gen_assigned[, !(grepl("time", colnames(df_gen_assigned)))])
-#   surplus_total_hourly <- generation - df_gen_assigned_total
-#   surplus_total_sum_hourly <- sum(surplus_total_hourly)  
-#   print(surplus_total_sum_hourly)
-#   
-#   df_plot_gen_assigned <- melt(data = df_gen_assigned, id.vars = "time", variable.name = "series")
-#   df_plot_generation <- melt(df[, grep(pattern = paste0(c("0","time"), collapse = "|"), x = colnames(df))], id.vars = "time", variable.name = "series")
-#   
-#   p <- ggplot() +
-#     geom_line(aes(x = hour(df_plot_generation$time), y = df_plot_generation$value)) +
-#     geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) + 
-#     labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV dynamic assignation", fill = "User")  
-#   
-#   # now I will calculate the surplus if this DAILY coefficients where used to assign 
-#   # the energy repartition
-#   df_new_assignation_using_daily_coeffs <- data.frame("time" = time)
-#   
-#   for (i in vector_names_optimum_combination) {
-#     consumption <- df[, grep(pattern = paste0("cons_", i), x = colnames(df))]
-#     generation_to_assign <- generation * as.numeric(static_coefficients_daily[paste0("user_",i)])
-#     generation_assigned <- ifelse(generation_to_assign >= consumption, consumption, generation_to_assign)
-#     consumption_grid <- ifelse(consumption - generation_assigned >= 0, consumption - generation_assigned, 0) 
-#     surplus <- generation - generation_assigned
-#     df_surplus_aux <- data.frame("time" = time, 
-#                                  "gen_assigned" = generation_assigned,
-#                                  "cons_grid" = consumption_grid, 
-#                                  "surplus" = surplus)
-#     
-#     colnames(df_surplus_aux)[2] <- paste0("gen_assigned_",i) 
-#     colnames(df_surplus_aux)[3] <- paste0("cons_grid_",i) 
-#     colnames(df_surplus_aux)[4] <- paste0("surplus_",i) 
-#     df_new_assignation_using_daily_coeffs <- merge(df_new_assignation_using_daily_coeffs, df_surplus_aux, by = "time")
-#   }
-#   
-#   df_gen_assigned <- df_new_assignation_using_daily_coeffs[, grepl(pattern = "*time*|*gen_assigned*", x = colnames(df_new_assignation_using_daily_coeffs))]
-#   # HARDCODED:
-#   colnames(df_gen_assigned)[2] <- 1 
-#   colnames(df_gen_assigned)[3] <- 4 
-#   
-#   return(df_gen_assigned)
-# }
-
 
 

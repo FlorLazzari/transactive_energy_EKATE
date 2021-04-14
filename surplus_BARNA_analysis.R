@@ -85,7 +85,7 @@ p <- ggplot() + geom_line(aes(hour(df_plot$time), df_plot$value , color = df_plo
       geom_area(aes(x = hour(df_sum$time), y = df_sum$consumption_sum), alpha = 0.5) +
       labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
 
-ggsave(filename = "electrical_generation_and_consumption.jpg", plot = p, width = 5,height = 3)
+# ggsave(filename = "electrical_generation_and_consumption.jpg", plot = p, width = 5,height = 3)
 
 surplus_all_users <- ifelse(df_pv_generation_0_day_1$gen_0 - df_sum$consumption_sum >= 0, df_pv_generation_0_day_1$gen_0 - df_sum$consumption_sum, 0)
 sum(surplus_all_users)
@@ -228,7 +228,7 @@ p <- ggplot() +
   geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) + 
   labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV dynamic assignation", fill = "User")  
 
-ggsave(filename = "dynamic_assigned.jpg", plot = p, width = 5, height = 3)
+# ggsave(filename = "dynamic_assigned.jpg", plot = p, width = 5, height = 3)
 
 # now I will calculate the surplus if this DAILY coefficients where used to assign 
 # the energy repartition
@@ -284,7 +284,7 @@ p <- ggplot() +
   geom_area(aes(x = hour(df_plot_gen_assigned$time), y = df_plot_gen_assigned$value, fill = df_plot_gen_assigned$series), alpha = 0.5) +
   labs(x = "Time [h]", y = "PV generation [kWh]", "title" = "PV static assignation", fill = "User")  
 
-ggsave(filename = "static_assignation.jpg", plot = p,  width = 5, height = 3)
+# ggsave(filename = "static_assignation.jpg", plot = p,  width = 5, height = 3)
 
 
 
@@ -344,7 +344,7 @@ bp <- ggplot(df_plot, aes(x = group, y = surplus, fill = group))+
   scale_fill_manual(values=c("#00b159", "#56B4E9")) +
   theme(legend.position = "none")
   
-ggsave(filename = "surplus_gain_different_coefficients.jpg", plot = bp, width = 4)
+# ggsave(filename = "surplus_gain_different_coefficients.jpg", plot = bp, width = 4)
 
 
 ordered_daily_surplus <- daily_surplus[order(daily_surplus)]
@@ -373,4 +373,5 @@ bp <- ggplot(df_plot, aes(x = combination, y = value, fill = combination))+
   labs(x = "Possible user combination", y = "PV surplus [kWh]", "title" = paste0("PV Surplus gain = ", percentage, "%")) + 
   theme(legend.position = "none")
 
-ggsave(filename = "possible_user_combination.pdf", plot = bp, width = 4)
+# ggsave(filename = "possible_user_combination.pdf", plot = bp, width = 4)
+

@@ -49,6 +49,8 @@ df_month_1 = reducing_consumption_fake(df_month_1)
 
 p = plot_initial(df_month_1)
 
+df_month_1 = df_month_1[1:24,]
+
 df_gen = data.frame("gen_1" = df_month_1[, "gen_1"])
 df_cons = df_month_1[, grep(pattern = "cons", x = colnames(df_month_1))]
 
@@ -83,8 +85,9 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 #   Too few positive probabilities!
 tic = Sys.time()
 # TODO: change this
-df_gen = df_gen[1:24,]
+
 optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+
 toc = Sys.time()
 toc-tic
 
@@ -102,6 +105,8 @@ for (i in c(1:5)) {
   
   plot_best_combination(best_combination, iteration = i)
 }
+
+# TODO: work on plots
 
 plot_optimization1_vs_optimization2(optimal_combination_using_2_GAs)
 

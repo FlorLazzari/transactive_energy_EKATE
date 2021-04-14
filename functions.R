@@ -171,14 +171,20 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
   pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
   n_community_vector = rowSums(pre_optimal_combinations)
   
+  # checking:
+  # length(n_community_vector)
+  # 7960
+  # 8494
+  # 8464
+  # 8196
+  
   # will calculate everything for one day
   # coefficients will be a matrix of dim = 24*n_community:
   # will do a for loop to iterate for all the "types of days"
-  
 
   
-  # hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
-  # pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
+  hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
+  pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
   
   # checking:
   # colSums(pre_optimal_combinations)
@@ -189,11 +195,13 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
   # new_optimum_coefficients = pre_optimum_coefficients
   new_surplus = rep(0, nrow(pre_optimal_combinations))
   new_optimum_coefficients = list()
-  new_payback = list()
+  new_payback = df_cons[0,1:ncol(df_cons)]
   
   
   # pre_payback = pre_optimum_coefficients
   
+  j = 1
+  vector_i = c()
   for (i in 1:nrow(pre_optimal_combinations)) {
     
     combination_selected = pre_optimal_combinations[i, ]
@@ -201,14 +209,8 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
     individual_investment_max = individual_investment[combination_selected==1]  
     
 
-    
-    # surplus_min_x = sum(calculate_surplus_hourly_individual(df_gen, df_cons, coefficients))
-    
-    # if (sum(combination_selected) == n_community &
-    #     sum(individual_investment_max) > global_investment) {
-    
     if (sum(individual_investment_max) > global_investment) {
-      
+
       n_community = as.numeric(n_community_vector[i])
       
       # x just selects the users, no need to calculate the optimum combination here
@@ -232,7 +234,7 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
       d = 0
       
       sunny_hours = which(df_gen != 0)
-      df_gen_day = df_gen[sunny_hours + d*24]
+      df_gen_day = df_gen[sunny_hours + (d*24),]
       df_cons_selected_day = df_cons_selected[sunny_hours + d*24,]
       
       n_sunny_hours = length(sunny_hours)      
@@ -245,33 +247,31 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
                           popSize = 100, maxiter = 5, run = 5)
       
       coefficients_optimum <- optim_results@solution[1, ]
-      # coefficients_optimum = coefficients_optimum/sum(coefficients_optimum)
-      
       coefficients_optimum = matrix(data = coefficients_optimum, nrow = n_sunny_hours, byrow = T)
       coefficients_optimum = coefficients_optimum/rowSums(coefficients_optimum)
       
       combination_optimum = matrix(1, nrow = nrow(coefficients_optimum)) %*% combination_selected
       combination_optimum[combination_optimum!=0] = coefficients_optimum
       
-      new_optimum_coefficients[[i]] = coefficients_optimum
-
+      new_optimum_coefficients[[j]] = coefficients_optimum
+      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_day, df_gen_day, individual_investment_selected, matrix_coefficients = coefficients_optimum)
       
-      # TODO: working on saving this!
-      # new_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, new_optimum_coefficients[i,combination_selected!=0])
-      # 
-      # surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, combination_optimum))
-      # new_surplus[i] <- surplus 
-    } else{
-      new_surplus[i] <- 1000000
+      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_optimum, df_gen_day, df_cons_selected_day))
+      new_surplus[j] <- surplus
+      
+      vector_i = c(vector_i, i)
+      j = j + 1
     }
   }
   
-  results = list("pre_optimum_coefficients" = pre_optimum_coefficients, 
-                 "pre_surplus" = pre_surplus, 
-                 "pre_payback" = pre_payback, 
+  results = list(
+                 # "pre_optimum_coefficients" = pre_optimum_coefficients, 
+                 "pre_surplus" = pre_surplus,
+                 # "pre_payback" = pre_payback, 
                  "new_optimum_coefficients" = new_optimum_coefficients, 
                  "new_surplus" = new_surplus, 
-                 "new_payback" = new_payback)
+                 "new_payback" = new_payback, 
+                 "vector_i" = vector_i)
   
   return(results)
 }
@@ -279,7 +279,7 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
 
 optimization_1_betas <- function(n_community, n_binary_rep, df_gen, df_cons){
   
-  optim_results <- ga(type = "binary", fitness = fitness_1, 
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
                       nBits = n_binary_rep*n_community,
                       n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
                       # popSize = 100, maxiter = 1000, run = 100)
@@ -318,7 +318,7 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
   # surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, optimum_coefficients))
   
-  surplus = sum(calculate_surplus_hourly_community(df_gen, df_cons, combination))
+  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen, df_cons = df_cons))
   score <- surplus
   
   return(-score)
@@ -387,7 +387,6 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
 }
 
 
-
 calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
   not_selected_cons = (combination == 0) 
   df_cons[, not_selected_cons] = 0
@@ -406,6 +405,44 @@ calculate_gen_assigned_betas <- function(df_gen_day, matrix_coefficients){
   df_gen_assigned <- as.data.frame(df_gen * matrix_coefficients)  
   return(df_gen_assigned)
 }
+
+
+calculate_surplus_hourly_individual_betas <- function(matrix_coefficients, df_gen_day, df_cons_selected_day){
+  
+  df_gen_assigned <- calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
+  individual_hourly_surplus <- df_gen_assigned - df_cons_selected_day
+  individual_hourly_surplus[individual_hourly_surplus < 0] = 0
+  
+  return(individual_hourly_surplus)
+}
+
+
+calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_day
+  surplus_x[surplus_x < 0] = 0
+  
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_day)
+  
+  grid_x = df_cons_selected_day - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * colSums(surplus_x)
+  
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  payback_years = individual_investment / profit_one_year 
+  
+  return(payback_years)
+}
+
 
 
 # bee_uCrossover_float_betas <- function(object, parents, n_binary_rep, n_community){

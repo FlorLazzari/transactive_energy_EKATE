@@ -84,52 +84,9 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # Error in gareal_lsSelection_Rcpp(object) :
 #   Too few positive probabilities!
 tic = Sys.time()
-# TODO: change this
-
 optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
-
 toc = Sys.time()
 toc-tic
-
-# To check convergence and execution time
-time = rep(0, 5)
-optimum_surplus = rep(0, 5)
-for (i in c(1:5)) {
-  tic = Sys.time()
-  optimal_combination_using_2_GAs <- optimize_using_2_GAs_withBestSolutionSelection(n_community_max = n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
-  toc = Sys.time()
-  time[i] = toc-tic
-
-  best_combination = selection_best_combination(optimal_combination_using_2_GAs)
-  optimum_surplus[i] = best_combination$surplus
-  
-  plot_best_combination(best_combination, iteration = i)
-}
-
-# TODO: work on plots to show that the hourly betas are working correctly
-
-plot_optimization1_vs_optimization2(optimal_combination_using_2_GAs)
-
-best_combination = select_best_combinations_betas(optimal_combination_using_2_GAs)
-
-sunny_hours_index = which(df_gen != 0)
-df_gen_day = df_gen[sunny_hours_index,]
-
-df_cons_selected_users = df_cons[, !is.na(best_combination$payback)]
-df_cons_selected_users_day = df_cons_selected_users[sunny_hours_index,]
-
-df_gen_assigned_selected_users = calculate_gen_assigned_betas(df_gen_day = df_gen_day, matrix_coefficients = best_combination$optimum_coefficients)
-
-
-plot_solar_consumption_daily_mean_betas(df_gen = df_gen, df_gen_assigned = df_gen_assigned_selected_users, df_cons_selected_users = df_cons_selected_users, time = df_month_1$time)
-plot_disaggregated_daily_mean_per_user(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_day, time = df_month_1[, "time"])
-plot_disaggregated_daily_mean_community(df_gen_assigned = df_gen_assigned_selected, df_cons_selected = df_cons_selected, time = df_month_1[, "time"])
-# the economic difference is negligible but this makes sense because the betas are not hourly yet (?)
-# with hourly betas this should change
-plot_economic_comparison(df_gen = df_gen, optimum_combination = best_combination$optimum_coefficients[best_combination$optimum_coefficients != 0], df_cons_selected = df_cons[best_combination$optimum_coefficients != 0])
-
-
-
 
 
 

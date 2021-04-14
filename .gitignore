@@ -3,3 +3,6 @@ data
 
 # ignore files in graphs folder
 graphs
+
+# ignore files in workspace folder
+workspace

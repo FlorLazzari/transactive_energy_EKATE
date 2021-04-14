@@ -193,7 +193,7 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
   # sum(df_gen)
   
   # new_optimum_coefficients = pre_optimum_coefficients
-  new_surplus = rep(0, nrow(pre_optimal_combinations))
+  new_surplus = c()
   new_optimum_coefficients = list()
   new_payback = df_cons[0,1:ncol(df_cons)]
   
@@ -233,11 +233,11 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
       # }
       d = 0
       
-      sunny_hours = which(df_gen != 0)
-      df_gen_day = df_gen[sunny_hours + (d*24),]
-      df_cons_selected_day = df_cons_selected[sunny_hours + d*24,]
+      sunny_hours_index = which(df_gen != 0)
+      df_gen_day = df_gen[sunny_hours_index + (d*24),]
+      df_cons_selected_day = df_cons_selected[sunny_hours_index + d*24,]
       
-      n_sunny_hours = length(sunny_hours)      
+      n_sunny_hours = length(sunny_hours_index)      
       
       
       optim_results <- ga(type = "real-valued", fitness = fitness_2_betas, 
@@ -257,7 +257,8 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
       new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_day, df_gen_day, individual_investment_selected, matrix_coefficients = coefficients_optimum)
       
       surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_optimum, df_gen_day, df_cons_selected_day))
-      new_surplus[j] <- surplus
+      
+      new_surplus <- c(new_surplus, surplus)
       
       vector_i = c(vector_i, i)
       j = j + 1
@@ -443,6 +444,114 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
   return(payback_years)
 }
 
+
+select_best_combinations_betas <- function(optimal_combination_using_2_GAs){
+  
+  # pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  # pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  # pre_payback = optimal_combination_using_2_GAs$pre_payback
+  new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
+  new_surplus = optimal_combination_using_2_GAs$new_surplus
+  new_payback = optimal_combination_using_2_GAs$new_payback
+  
+  index_order = order(new_surplus, decreasing = F)
+  
+  optimum_coefficients = new_optimum_coefficients[[index_order[1]]]
+  surplus = new_surplus[index_order[1]]
+  payback = new_payback[index_order[1], ]
+  
+  return(list("optimum_coefficients" = optimum_coefficients,
+              "surplus" = surplus, 
+              "payback" = payback))
+}  
+
+
+plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, time){
+  
+  m = unique(month(time))
+  
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users)
+  
+  df_gen$hour = hour(time) 
+  df_solar_consumption$hour = sunny_hours_index
+  
+  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  
+  df_plot_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_gen_mean[, "hour"], y = df_gen_mean[, "gen_1"])) +
+    geom_area(aes(x = df_plot_solar_consumption_mean[, "hour"], y = df_plot_solar_consumption_mean[, "value"], fill = df_plot_solar_consumption_mean[,"series"]), alpha = 0.5) +
+    labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
+  
+  return(p)
+}
+
+
+plot_disaggregated_daily_mean_per_user_betas <- function(df_gen_assigned, df_cons_selected, sunny_hours_index){
+  
+  # calculate solar consumption and surplus
+  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected[sunny_hours_index,])
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected[sunny_hours_index,]
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected[sunny_hours_index,] - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # add hour column
+  solar_consumption$hour = sunny_hours_index
+  solar_surplus$hour = sunny_hours_index
+  grid$hour = sunny_hours_index
+  
+  # aggregate
+  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+  
+  # to calculate the self consumption and surplus 
+  df_cons_selected$hour = hour(time)
+  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
+  
+  df_gen_assigned$hour = sunny_hours_index
+  df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
+  
+  daily_hour <- solar_surplus_mean$hour
+  
+  plots_list = list()
+  
+  for (user in 1:(ncol(df_cons_selected)-1)) {
+    
+    solar_consumption_mean_user <- solar_consumption_mean[, c(1+user)]
+    grid_mean_user <- grid_mean[, c(1+user)]
+    solar_surplus_mean_user <- solar_surplus_mean[, c(1+user)]
+    
+    df_plot <- data.frame("hour" = daily_hour,
+                          "Solar_surplus" = solar_surplus_mean_user,
+                          "Solar_consumption" = solar_consumption_mean_user,
+                          "Grid_consumption" = grid_mean_user
+    )
+    
+    df_plot = melt(df_plot, id.vars = "hour")
+    
+    # TODO: understand which of the 2 is the correct one
+    # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+    self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+    
+    surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, user+1])  
+    
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, user+1])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("User ", user,": self consumption = ", round(self_consumption_percentage_mean, digits = 2), " & surplus = ", round(surplus_percentage_mean, digits = 2)), fill = "")  
+    
+    ggsave(filename = paste0("graphs/user_",user), plot = p, device = "pdf", width = 5, height = 3)
+    
+  }
+  return()
+}
 
 
 # bee_uCrossover_float_betas <- function(object, parents, n_binary_rep, n_community){
@@ -938,9 +1047,9 @@ calculate_n_community_max <- function(generation = df_gen$gen_1, df_cons, time =
 
 select_best_combinations <- function(optimal_combination_using_2_GAs){
   
-  pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
-  pre_surplus = optimal_combination_using_2_GAs$pre_surplus
-  pre_payback = optimal_combination_using_2_GAs$pre_payback
+  # pre_optimum_coefficients = optimal_combination_using_2_GAs$pre_optimum_coefficients
+  # pre_surplus = optimal_combination_using_2_GAs$pre_surplus
+  # pre_payback = optimal_combination_using_2_GAs$pre_payback
   new_optimum_coefficients = optimal_combination_using_2_GAs$new_optimum_coefficients
   new_surplus = optimal_combination_using_2_GAs$new_surplus
   new_payback = optimal_combination_using_2_GAs$new_payback
@@ -948,6 +1057,7 @@ select_best_combinations <- function(optimal_combination_using_2_GAs){
   index_order = order(new_surplus, decreasing = F)
   
   optimum_coefficients = new_optimum_coefficients[index_order[1],]
+  # optimum_coefficients = new_optimum_coefficients[[index_order[1]]]
   surplus = new_surplus[index_order[1]]
   payback = new_payback[index_order[1], ]
   

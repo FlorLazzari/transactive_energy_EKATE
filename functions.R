@@ -75,18 +75,10 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
   pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
   n_community_vector = rowSums(pre_optimal_combinations)
   
-  # checking:
-  # length(n_community_vector)
-  # 7960
-  # 8494
-  # 8464
-  # 8196
-  
   # will calculate everything for one day
   # coefficients will be a matrix of dim = 24*n_community:
   # will do a for loop to iterate for all the "types of days"
 
-  
   hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
   pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
   
@@ -130,23 +122,18 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
       
       # pre_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, pre_optimum_coefficients[i,combination_selected!=0])
       
-
-      # TODO:
-      # for (d in day) {
-      #   
-      # }
       d = 0
       
-      sunny_hours_index = which(df_gen != 0)
-      df_gen_day = df_gen[sunny_hours_index + (d*24),]
-      df_cons_selected_day = df_cons_selected[sunny_hours_index + d*24,]
+      # sunny_hours_index = which(df_gen != 0)
+      # df_gen_day = df_gen[sunny_hours_index + (d*24),]
+      # df_cons_selected_user = df_cons_selected[sunny_hours_index + d*24,]
       
-      n_sunny_hours = length(sunny_hours_index)      
+      n_sunny_hours = nrow(df_cons_selected)      
       
       
       optim_results <- ga(type = "real-valued", fitness = fitness_2_betas, 
                           lower = array(0, dim = n_community*n_sunny_hours), upper = array(1, dim = n_community*n_sunny_hours),  
-                          df_gen_day = df_gen_day, df_cons_selected_day = df_cons_selected_day, combination = combination_selected, 
+                          df_gen_day = df_gen, df_cons_selected_day = df_cons_selected, combination = combination_selected, 
                           individual_investment = individual_investment_selected,
                           popSize = 100, maxiter = 5, run = 5)
       
@@ -158,9 +145,9 @@ optimize_hourly_betas <- function(n_community_max, n_binary_rep, df_gen, df_cons
       combination_optimum[combination_optimum!=0] = coefficients_optimum
       
       new_optimum_coefficients[[j]] = coefficients_optimum
-      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_day, df_gen_day, individual_investment_selected, matrix_coefficients = coefficients_optimum)
+      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected, df_gen, individual_investment_selected, matrix_coefficients = coefficients_optimum)
       
-      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_optimum, df_gen_day, df_cons_selected_day))
+      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_optimum, df_gen, df_cons_selected))
       
       new_surplus <- c(new_surplus, surplus)
       
@@ -390,14 +377,14 @@ plot_best_combination <- function(best_combination, iteration){
 
 
 
-plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, time){
+plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, df_local_time){
   
-  m = unique(month(time))
+  m = unique(month(df_local_time$time))
   
   df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users)
-  
-  df_gen$hour = hour(time) 
-  df_solar_consumption$hour = sunny_hours_index
+
+  df_gen$hour = df_local_time$hour
+  df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
   
   df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
   df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
@@ -413,45 +400,57 @@ plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_
 }
 
 
-plot_disaggregated_daily_mean_per_user_betas <- function(df_gen_assigned, df_cons_selected, sunny_hours_index){
+plot_disaggregated_daily_mean_per_user_betas <- function(df_gen_assigned, df_cons_selected_users, df_local_time){
+  
+  
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
   
   # calculate solar consumption and surplus
-  solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected[sunny_hours_index,])
-  
-  solar_surplus <- df_gen_assigned - df_cons_selected[sunny_hours_index,]
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
+
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
   solar_surplus[solar_surplus < 0] = 0
   
-  grid = df_cons_selected[sunny_hours_index,] - df_gen_assigned
+  grid = df_cons_selected_users_sunny - df_gen_assigned
   grid[grid < 0] = 0
   
   # add hour column
-  solar_consumption$hour = sunny_hours_index
-  solar_surplus$hour = sunny_hours_index
-  grid$hour = sunny_hours_index
+  df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+  solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
+  grid$hour = df_local_time$hour[df_local_time$sunny]
+  df_cons_selected_users$hour = df_local_time$hour
+  
+  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
+  
+  df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
   
   # aggregate
-  solar_consumption_mean = aggregate(x = solar_consumption, by = list(solar_consumption$hour), FUN = mean)
+  solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
   solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
   grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
   
   # to calculate the self consumption and surplus 
-  df_cons_selected$hour = hour(time)
-  df_cons_selected_mean = aggregate(x = df_cons_selected, by = list(df_cons_selected$hour), FUN = mean) 
+  df_cons_selected_users$hour = df_local_time$hour
+  df_cons_selected_mean = aggregate(x = df_cons_selected_users, by = list(df_cons_selected_users$hour), FUN = mean) 
   
-  df_gen_assigned$hour = sunny_hours_index
+  df_gen_assigned$hour = df_local_time$hour[df_local_time$sunny]
   df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
-  
-  daily_hour <- solar_surplus_mean$hour
   
   plots_list = list()
   
-  for (user in 1:(ncol(df_cons_selected)-1)) {
+  for (user in 1:(ncol(df_cons_selected_users)-1)) {
     
     solar_consumption_mean_user <- solar_consumption_mean[, c(1+user)]
     grid_mean_user <- grid_mean[, c(1+user)]
     solar_surplus_mean_user <- solar_surplus_mean[, c(1+user)]
     
-    df_plot <- data.frame("hour" = daily_hour,
+    df_plot <- data.frame("hour" = df_local_time$hour,
                           "Solar_surplus" = solar_surplus_mean_user,
                           "Solar_consumption" = solar_consumption_mean_user,
                           "Grid_consumption" = grid_mean_user
@@ -686,7 +685,7 @@ plot_optimization1_vs_optimization2 <- function(optimal_combination_using_2_GAs)
 ############################# AUX - main #############################
 
 
-calculate_n_community_max <- function(generation = df_gen$gen_1, df_cons, time = df_month_1$time){
+calculate_n_community_max <- function(generation, df_cons, time = df_month_1$time){
   
   # minimum self consumption: 0.2?
   

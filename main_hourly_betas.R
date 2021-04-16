@@ -49,7 +49,11 @@ df_month_1 = reducing_consumption_fake(df_month_1)
 
 p = plot_initial(df_month_1)
 
-df_month_1 = df_month_1[1:24,]
+# TODO:
+# this will be the typical consumption patterns for month 1 
+# (to start only 2 typical consumption patterns will be used, this is why the df_month_1 will be of length 24*2)
+df_month_1 = df_month_1[(day(df_month_1[, "time"]) %in% c(4)), ]
+# df_month_1 = df_month_1[1:24,]
 
 df_gen = data.frame("gen_1" = df_month_1[, "gen_1"])
 df_cons = df_month_1[, grep(pattern = "cons", x = colnames(df_month_1))]
@@ -58,10 +62,15 @@ df_cons = df_month_1[, grep(pattern = "cons", x = colnames(df_month_1))]
 df_gen[is.na(df_gen)] = 0
 df_cons[is.na(df_cons)] = 0
 
+df_local_time = data.frame("time" = df_month_1[, "time"], 
+                           "date" = day(df_month_1[, "time"]), 
+                           "hour" = hour(df_month_1[, "time"]), 
+                           "sunny" = (df_gen$gen_1 != 0))
+df_gen_sunny = df_gen[df_local_time$sunny,]
 
 # should always use summer months to calculate the community max
 n_community_max = calculate_n_community_max(generation = df_gen$gen_1, df_cons, time = df_month_1$time)
-# n_community_max = 6
+n_community_max = 6
 
 global_investment = max(df[[1]]$energy, na.rm = T)*1100
 
@@ -70,6 +79,8 @@ global_investment = max(df[[1]]$energy, na.rm = T)*1100
 # generating fake info here: (should ask Eloi for new data)
 df_cons = cbind(df_cons, df_cons)
 colnames(df_cons)[17:32] = paste0(rep("cons_", 16),17:32)
+
+df_cons_sunny = df_cons[df_local_time$sunny,]
 
 n_binary_rep = log(ncol(df_cons), base=2)
 # TODO: should change this
@@ -84,7 +95,7 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # Error in gareal_lsSelection_Rcpp(object) :
 #   Too few positive probabilities!
 tic = Sys.time()
-optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny, global_investment, individual_investment)
 toc = Sys.time()
 toc-tic
 

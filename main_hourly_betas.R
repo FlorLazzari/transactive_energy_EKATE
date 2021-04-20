@@ -89,18 +89,21 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # checking:
 # sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment
 
-
 # TODO: 
 # why the first run has this error? is it still appearing?
 # Error in gareal_lsSelection_Rcpp(object) :
 #   Too few positive probabilities!
+# (when hourly = F)
+
+# TODO: should define 2 setting features:
+# level of hippiesm (weight_surplus)
+# understand and set the parameters of each GA!
+
+
 tic = Sys.time()
-optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny, global_investment, individual_investment)
+optimal_combination_using_2_GAs <- optimize_hourly_betas(hourly = T, weight_surplus = 0.8, n_community_max, n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny, global_investment, individual_investment)
 toc = Sys.time()
 toc-tic
-
-
-
 
 # for the mixed integer linear programming
 # write.csv(x = t(df_day_1), file = "df_day_1", row.names = FALSE)

@@ -20,13 +20,11 @@ df_local_time = data.frame("time" = df_month_1[, "time"],
 
 df_gen_assigned = calculate_gen_assigned_betas(df_gen_day = df_gen[df_local_time$sunny,], matrix_coefficients = best_combination$optimum_coefficients)
 
-
-# plot_solar_consumption_daily_mean_betas(df_gen = df_gen, df_gen_assigned = df_gen_assigned, df_cons_selected_users = df_cons[df_local_time$sunny, !is.na(best_combination$payback)], df_local_time)
-
+plot_solar_consumption_daily_mean_betas(df_gen = df_gen, df_gen_assigned = df_gen_assigned, df_cons_selected_users = df_cons[df_local_time$sunny, !is.na(best_combination$payback)], df_local_time)
 plot_disaggregated_daily_mean_per_user_betas(df_gen_assigned = df_gen_assigned, df_cons_selected_users = df_cons[, !is.na(best_combination$payback)], df_local_time)
+plot_disaggregated_daily_mean_community_betas(df_gen_assigned = df_gen_assigned, df_cons_selected_users = df_cons[, !is.na(best_combination$payback)], df_local_time)
+plot_economic_comparison_betas(df_gen = df_gen, df_gen_assigned =  df_gen_assigned, df_cons_selected_users = df_cons[, !is.na(best_combination$payback)], matrix_coefficients = best_combination$optimum_coefficients, df_local_time = df_local_time)
 
-plot_disaggregated_daily_mean_community(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users, df_local_time)
-# the economic difference is negligible but this makes sense because the betas are not hourly yet (?)
-# with hourly betas this should change
-plot_economic_comparison(df_gen = df_gen, optimum_combination = best_combination$optimum_coefficients[best_combination$optimum_coefficients != 0], df_cons_selected = df_cons[best_combination$optimum_coefficients != 0])
+
+
 

@@ -83,7 +83,7 @@ optimize_hourly_betas <- function(hourly, weight_surplus, n_community_max, n_bin
   # will do a for loop to iterate for all the "types of days"
 
   hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
-  pre_surplus = as.numeric(lapply(X = hourly_surplus, FUN = sum))
+  pre_surplus = colSums(hourly_surplus)
   
   # checking:
   # colSums(pre_optimal_combinations)
@@ -323,22 +323,16 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
 }
 
 
-fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment, weight_surplus){
+fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment, weight_surplus, payback_ideal){
   
-  # n_community = 4, amount of participans forming part of the community
-  # vector of length N (in this case N = 16, amount of participants
-  # for example
   # x = runif(dim, 0, 1)
   
   n_sunny_hours = nrow(df_cons_selected_day)
   n_community = ncol(df_cons_selected_day)
   
-  # TODO:
-  # coefficients_x = matrix(data = x, nrow = n_sunny_hours, byrow = T)
-  # coefficients_x = matrix(data = x, ncol = n_community, byrow = T)
   coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
   coefficients_x = coefficients_x/rowSums(coefficients_x)
-
+  
   df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients = coefficients_x)
   
   # checking:
@@ -365,15 +359,20 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
   
   # TODO: change the "sale_price * coefficients_x * sum(surplus_x)" 
   # this makes no sense with hourly betas
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * colSums(surplus_x)
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid), colSums(surplus_x), colSums(grid))
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
   
   payback_years = individual_investment / profit_one_year 
   
+  # TODO:
+  payback_years[is.na(payback_years)] = 100 
+  
   # TODO: payback ideal?
-  payback_ideal = 4
+  # payback_ideal = 1
   
   # TODO:
   cost_payback = sum(exp(payback_years - payback_ideal))
@@ -677,18 +676,11 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
 
 plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, matrix_coefficients = best_combination$optimum_coefficients, df_local_time){
   
-  # df_gen_assigned_selected = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
-  # solar_consumption = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
-  # solar_surplus <- df_gen_assigned_selected - df_cons_selected
-  # solar_surplus[solar_surplus < 0] = 0
-  # grid = df_cons_selected - df_gen_assigned_selected
-  # grid[grid < 0] = 0
-
   df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
   colnames(df_gen_assigned) = colnames(df_cons_selected_users)
 
   # calculate solar consumption and surplus
-  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
+  # df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
   
   solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
   solar_surplus[solar_surplus < 0] = 0
@@ -697,18 +689,18 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   grid[grid < 0] = 0
   
   # add hour column
-  df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
-  solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
+  # df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+  # solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
   grid$hour = df_local_time$hour[df_local_time$sunny]
   df_cons_selected_users$hour = df_local_time$hour
-  
+  # 
   grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
-  
-  df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
-  df_aux[,-ncol(df_aux)] = 0
-  
-  df_solar_consumption = rbind(df_solar_consumption, df_aux)
-  solar_surplus = rbind(solar_surplus, df_aux)
+  # 
+  # df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
+  # df_aux[,-ncol(df_aux)] = 0
+  # 
+  # # df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  # solar_surplus = rbind(solar_surplus, df_aux)
   
   n_community = ncol(df_gen_assigned)
   
@@ -718,21 +710,11 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   matrix_coefficients_non_optimum = matrix_coefficients
   matrix_coefficients_non_optimum[,] = 1/n_community
     
-  # combination_non_optimum = rep(1/n_community,n_community)
-  
-  # checking:
-  # optimum_combination - combination_non_optimum
-  
   df_gen_assigned_non_optimum = calculate_gen_assigned_betas(df_gen_day = df_gen[df_local_time$sunny,], matrix_coefficients = matrix_coefficients_non_optimum)
   colnames(df_gen_assigned_non_optimum) = colnames(df_gen_assigned)
-  
-  
-  # df_gen_assigned_selected_non_optimum = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
-
-  
 
   # calculate solar consumption and surplus
-  df_solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_non_optimum, df_cons_selected_users_sunny)
+  # df_solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_non_optimum, df_cons_selected_users_sunny)
   
   # colnames(df_solar_consumption_non_optimum) = colnames(df_solar_consumption)
   
@@ -743,14 +725,14 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   grid_non_optimum[grid_non_optimum < 0] = 0
   
   # add hour column
-  df_solar_consumption_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
-  solar_surplus_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
+  # df_solar_consumption_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
+  # solar_surplus_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
   grid_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
-
-  grid_non_optimum = rbind(grid_non_optimum, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
+  # 
+  grid_non_optimum = rbind(grid_non_optimum, df_cons_selected_users[!df_cons_selected_users$hour %in% grid_non_optimum$hour,])
   
-  df_solar_consumption_non_optimum = rbind(df_solar_consumption_non_optimum, df_aux)
-  solar_surplus_non_optimum = rbind(solar_surplus_non_optimum, df_aux)
+  # df_solar_consumption_non_optimum = rbind(df_solar_consumption_non_optimum, df_aux)
+  # solar_surplus_non_optimum = rbind(solar_surplus_non_optimum, df_aux)
 
   # solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
   # solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
@@ -759,14 +741,20 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   # grid_non_optimum[grid_non_optimum < 0] = 0
 
   ###
+  df_cons_selected_users = df_cons_selected_users[, -ncol(df_cons_selected_users)]
+  grid = grid[, -ncol(grid)]
+  grid_non_optimum = grid_non_optimum[, -ncol(grid_non_optimum)]
   
+  solar_surplus_to_sell = ifelse(colSums(solar_surplus) < colSums(grid), colSums(solar_surplus), colSums(grid))
+  solar_surplus_to_sell_non_optimum = ifelse(colSums(solar_surplus_non_optimum) < colSums(grid_non_optimum), colSums(solar_surplus_non_optimum), colSums(grid_non_optimum))
+
   purchase_price = 0.14859
   sale_price = 0.0508
 
   cost_old = colSums(purchase_price*df_cons_selected_users)
-  
-  cost_sun = purchase_price*colSums(grid) - sale_price * colSums(solar_surplus)
-  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * colSums(solar_surplus_non_optimum)
+
+  cost_sun = purchase_price*colSums(grid) - sale_price * solar_surplus_to_sell
+  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * solar_surplus_to_sell_non_optimum
     
   cost_old_one_year = cost_old * 360 
   cost_sun_one_year = cost_sun * 360 
@@ -775,26 +763,7 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   cost_old_20_years = cost_old_one_year * 20
   cost_sun_20_years = cost_sun_one_year * 20
   cost_sun_non_optimum_20_years = cost_sun_non_optimum_one_year * 20
-  
-  cost_old_20_years = cost_old_20_years[-length(cost_old_20_years)]
-  cost_sun_20_years = cost_sun_20_years[-length(cost_sun_20_years)]
-  cost_sun_non_optimum_20_years = cost_sun_non_optimum_20_years[-length(cost_sun_non_optimum_20_years)]
-  
-    
-  
-  # cost_old = colSums(purchase_price*df_cons_selected)
-  # cost_sun = purchase_price*colSums(grid) - sale_price * optimum_combination * sum(solar_surplus)
-  # cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * combination_non_optimum * sum(solar_surplus_non_optimum)
-  
-  # length_period = nrow(df_cons_selected)
-  # cost_old_one_year = cost_old * 24*360 / length_period
-  # cost_sun_one_year = cost_sun * 24*360 / length_period
-  # cost_sun_one_year_non_optimum = cost_sun_non_optimum * 24*360 / length_period
-  # 
-  # cost_old_20_years = cost_old_one_year * 20
-  # cost_sun_20_years = cost_sun_one_year * 20
-  # cost_sun_non_optimum_one_year = cost_sun_one_year_non_optimum * 20
-  
+
   # bar graph: what would you have paid in the following 20 years?
   # .with the optimum community
   # .with the non optimum community
@@ -805,11 +774,11 @@ plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_sele
   costs_comparison = melt(data = costs_comparison, id.vars = "names") 
        
   p <- ggplot() +
-    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) +
+    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
     # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_20_years), alpha = 0.5, width = 1, stat = "identity") +
     # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_non_optimum_one_year), alpha = 0.5, width = 1, stat = "identity") +
     # scale_x_continuous(breaks = 1:nrow(costs_comparison)) 
-  ggsave(filename = paste0("graphs/costs_comparison"), plot = p, device = "pdf", width = 5, height = 3)
+  ggsave(filename = paste0("graphs/costs_comparison"), plot = p, device = "pdf", width = 8, height = 3)
 }
 
 
@@ -874,6 +843,95 @@ plot_optimization1_vs_optimization2 <- function(optimal_combination_using_2_GAs)
   
   return()
 }
+
+
+plot_comparison_coefficients <- function(df_gen, df_cons_selected_users, matrix_coefficients_1, matrix_coefficients_2, df_local_time){
+  
+  df_gen_sunny = df_gen[df_local_time$sunny, ]
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  
+  df_gen_assigned_1 = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients_1)
+  colnames(df_gen_assigned_1) = colnames(df_cons_selected_users)
+  
+  solar_surplus_1 <- df_gen_assigned_1 - df_cons_selected_users_sunny
+  solar_surplus_1[solar_surplus_1 < 0] = 0
+  
+  grid_1 = df_cons_selected_users_sunny - df_gen_assigned_1
+  grid_1[grid_1 < 0] = 0
+  
+  ###
+  
+  df_gen_assigned_2 = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients_2)
+  colnames(df_gen_assigned_2) = colnames(df_cons_selected_users)
+  
+  solar_surplus_2 <- df_gen_assigned_2 - df_cons_selected_users_sunny
+  solar_surplus_2[solar_surplus_2 < 0] = 0
+  
+  grid_2 = df_cons_selected_users_sunny - df_gen_assigned_2
+  grid_2[grid_2 < 0] = 0
+  
+  ###
+  
+  df_cons_selected_users$hour = df_local_time$hour
+  
+  grid_1$hour = df_local_time$hour[df_local_time$sunny]
+  grid_1 = rbind(grid_1, df_cons_selected_users[!df_cons_selected_users$hour %in% grid_1$hour,])
+  
+  grid_2$hour = df_local_time$hour[df_local_time$sunny]
+  grid_2 = rbind(grid_2, df_cons_selected_users[!df_cons_selected_users$hour %in% grid_2$hour,])
+  
+  ###
+  
+  df_cons_selected_users = df_cons_selected_users[, -ncol(df_cons_selected_users)]
+  grid_1 = grid_1[, -ncol(grid_1)]
+  grid_2 = grid_2[, -ncol(grid_2)]
+  
+  solar_surplus_to_sell_1 = ifelse(colSums(solar_surplus_1) < colSums(grid_1), colSums(solar_surplus_1), colSums(grid_1))
+  solar_surplus_to_sell_2 = ifelse(colSums(solar_surplus_2) < colSums(grid_2), colSums(solar_surplus_2), colSums(grid_2))
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_users)
+  
+  cost_sun_1 = purchase_price*colSums(grid_1) - sale_price * solar_surplus_to_sell_1
+  cost_sun_2 = purchase_price*colSums(grid_2) - sale_price * solar_surplus_to_sell_2
+  
+  cost_old_one_year = cost_old * 360 
+  cost_sun_1_one_year = cost_sun_1 * 360 
+  cost_sun_2_one_year = cost_sun_2 * 360 
+  
+  cost_old_20_years = cost_old_one_year * 20
+  cost_sun_1_20_years = cost_sun_1_one_year * 20
+  cost_sun_2_20_years = cost_sun_2_one_year * 20
+  
+  # bar graph: what would you have paid in the following 20 years?
+  # .with the optimum community
+  # .with the non optimum community
+  # .without the community
+  
+  costs_comparison = as.data.frame(rbind(cost_old_20_years, cost_sun_1_20_years, cost_sun_2_20_years))
+  costs_comparison$names = rownames(costs_comparison)
+  costs_comparison = melt(data = costs_comparison, id.vars = "names") 
+  
+  p <- ggplot() +
+    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
+  ggsave(filename = paste0("graphs/costs_comparison"), plot = p, device = "pdf", width = 8, height = 3)
+  
+  solar_surplus_1 = colSums(solar_surplus_1)
+  solar_surplus_2 = colSums(solar_surplus_2)
+  solar_surplus_old = solar_surplus_2
+  solar_surplus_old[] = 0
+  
+  surplus_comparison = as.data.frame(rbind(solar_surplus_old, solar_surplus_1, solar_surplus_2))
+  surplus_comparison$names = rownames(surplus_comparison)
+  surplus_comparison = melt(data = surplus_comparison, id.vars = "names") 
+  
+  p <- ggplot() +
+    geom_bar(aes(x = surplus_comparison$variable,  y = surplus_comparison$value, fill = surplus_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
+  ggsave(filename = paste0("graphs/surplus_comparison"), plot = p, device = "pdf", width = 8, height = 3)
+}
+
 
 
 ############################# AUX - main #############################
@@ -950,16 +1008,37 @@ calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep){
 
 calculate_coefficients <- function(df_gen, df_cons, combination){
   
-  individual_hourly_surplus = calculate_surplus_hourly_individual(df_gen, df_cons, combination)
-  # TODO: check with pencil and paper that this is the correct way to calculate the coefficients
-  # this is the same as taking the mean of the hourly coefficients but, 
-  # I would like to take the coefficient of the hour(s) of maximum generation
-  surplus = sum(individual_hourly_surplus)
-  optimum_coefficients = surplus/colSums(individual_hourly_surplus)
-  optimum_coefficients[is.infinite(optimum_coefficients)] = NA
+  # individual_hourly_surplus = calculate_surplus_hourly_individual(df_gen, df_cons, combination)
+  # # TODO: check with pencil and paper that this is the correct way to calculate the coefficients
+  # # this is the same as taking the mean of the hourly coefficients but, 
+  # # I would like to take the coefficient of the hour(s) of maximum generation
+  # surplus = sum(individual_hourly_surplus)
+  # optimum_coefficients = surplus/colSums(individual_hourly_surplus)
+  # optimum_coefficients[is.infinite(optimum_coefficients)] = NA
+  # optimum_coefficients = optimum_coefficients/sum(optimum_coefficients, na.rm = T)
+  # optimum_coefficients[is.na(optimum_coefficients)] = 0
+
+  not_selected_cons = (combination == 0) 
+  df_cons[, not_selected_cons] = 0
+  
+  df_gen_assigned <- calculate_gen_assigned(df_gen, combination)
+  
+  optimum_coefficients = df_cons/df_gen_assigned
   optimum_coefficients = optimum_coefficients/sum(optimum_coefficients, na.rm = T)
-  optimum_coefficients[is.na(optimum_coefficients)] = 0
+
   return(optimum_coefficients)
+}
+
+
+calculate_matrix_coefficients <- function(df_gen, df_cons_selected){
+  df_gen_assigned <- calculate_gen_assigned(df_gen, combination = rep(1, length(df_cons_selected)))
+  
+  optimum_coefficients = df_cons_selected/df_gen_assigned
+  optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
+  
+  matrix_coefficients = as.matrix(optimum_coefficients)
+  
+  return(matrix_coefficients)
 }
 
 
@@ -1019,8 +1098,7 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
   
   surplus_x <- df_gen_assigned - df_cons_selected_day
   surplus_x[surplus_x < 0] = 0
-  
-  
+
   purchase_price = 0.14859
   sale_price = 0.0508
   
@@ -1029,12 +1107,17 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
   grid_x = df_cons_selected_day - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * colSums(surplus_x)
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid), colSums(surplus_x), colSums(grid))
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
   
   payback_years = individual_investment / profit_one_year 
+  
+  # TODO: 
+  payback_years[is.na(payback_years)] = 1000 
   
   return(payback_years)
 }

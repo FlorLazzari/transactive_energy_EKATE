@@ -286,6 +286,72 @@ plot_disaggregated_daily_mean_per_user <- function(df_gen_assigned, df_cons_sele
 }
 
 
+plot_economic_comparison <- function(df_gen, optimum_combination, df_cons_selected){
+  
+  df_gen_assigned_selected = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
+  solar_consumption = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus[solar_surplus < 0] = 0
+  grid = df_cons_selected - df_gen_assigned_selected
+  grid[grid < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+  
+  ###
+  
+  n_community = length(optimum_combination)
+  combination_non_optimum = rep(1/n_community,n_community)
+  
+  # checking:
+  # optimum_combination - combination_non_optimum
+  
+  df_gen_assigned_selected_non_optimum = calculate_gen_assigned(df_gen = df_gen, combination = optimum_combination)
+  solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+  solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
+  solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
+  grid_non_optimum = df_cons_selected - df_gen_assigned_selected_non_optimum
+  grid_non_optimum[grid_non_optimum < 0] = 0
+  # self_consumption_percentage_mean = colSums(solar_consumption) / colSums(df_cons_selected)
+  # surplus_percentage_mean = colSums(solar_surplus) / colSums(df_gen_assigned_selected)  
+  # sum(solar_surplus)
+  
+  ###
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected)
+  cost_sun = purchase_price*colSums(grid) - sale_price * optimum_combination * sum(solar_surplus)
+  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * combination_non_optimum * sum(solar_surplus_non_optimum)
+  
+  length_period = nrow(df_cons_selected)
+  cost_old_one_year = cost_old * 24*360 / length_period
+  cost_sun_one_year = cost_sun * 24*360 / length_period
+  cost_sun_one_year_non_optimum = cost_sun_non_optimum * 24*360 / length_period
+  
+  cost_old_20_years = cost_old_one_year * 20
+  cost_sun_20_years = cost_sun_one_year * 20
+  cost_sun_non_optimum_one_year = cost_sun_one_year_non_optimum * 20
+  
+  # bar graph: what would you have paid in the following 20 years?
+  # .with the optimum community
+  # .with the non optimum community
+  # .without the community
+  
+  costs_comparison = as.data.frame(rbind(cost_old_20_years, cost_sun_20_years, cost_sun_non_optimum_one_year))
+  costs_comparison$names = rownames(costs_comparison)
+  costs_comparison = melt(data = costs_comparison, id.vars = "names") 
+  
+  p <- ggplot() +
+    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) +
+    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_20_years), alpha = 0.5, width = 1, stat = "identity") +
+    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_non_optimum_one_year), alpha = 0.5, width = 1, stat = "identity") +
+    # scale_x_continuous(breaks = 1:nrow(costs_comparison)) 
+    ggsave(filename = paste0("costs_comparison"), plot = p, device = "pdf")
+}
+
+
 ############################# AUX - main #############################
 
 

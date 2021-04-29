@@ -49,27 +49,69 @@ df_month_1 = reducing_consumption_fake(df_month_1)
 
 p = plot_initial(df_month_1)
 
-df_month_1 = df_month_1[1:24,]
+# TODO:
+# this will be the typical consumption patterns for month 1 
+# (to start only 2 typical consumption patterns will be used, this is why the df_month_1 will be of length 24*2)
+df_day_1 = df_month_1[(day(df_month_1[, "time"]) %in% c(4)), ]
+# df_month_1 = df_month_1[1:24,]
 
-df_gen = data.frame("gen_1" = df_month_1[, "gen_1"])
-df_cons = df_month_1[, grep(pattern = "cons", x = colnames(df_month_1))]
+p = plot_initial(df_day_1)
+
+df_gen = data.frame("gen_1" = df_day_1[, "gen_1"])
+df_cons = df_day_1[, grep(pattern = "cons", x = colnames(df_day_1))]
 
 # changing NAs to 0
 df_gen[is.na(df_gen)] = 0
 df_cons[is.na(df_cons)] = 0
 
+df_local_time = data.frame("time" = df_day_1[, "time"], 
+                           "date" = day(df_day_1[, "time"]), 
+                           "hour" = hour(df_day_1[, "time"]), 
+                           "sunny" = (df_gen$gen_1 != 0))
+df_gen_sunny = df_gen[df_local_time$sunny,]
 
 # should always use summer months to calculate the community max
-n_community_max = calculate_n_community_max(generation = df_gen$gen_1, df_cons, time = df_month_1$time)
-# n_community_max = 6
+n_community_max = calculate_n_community_max(generation = df_gen$gen_1, df_cons, time = df_day_1$time)
+n_community_max = 6
 
 global_investment = max(df[[1]]$energy, na.rm = T)*1100
 
 #######################################################################################
 
+d = 4
+date = as.Date(paste0("2017-", m, "-", d))
+
+df_day_1_bis = meter_public[as.Date(meter_public$time) %in% date, ]
+ncol(df_day_1_bis)
+
+df_day_1_bis = df_day_1_bis[colSums(is.na(df_day_1_bis)) != nrow(df_day_1_bis)]
+ncol(df_day_1_bis)
+
+df_day_1_bis = df_day_1_bis[, c(1, which(as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = min)) - as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = max)) != 0))]
+ncol(df_day_1_bis)
+
+df_day_1_bis$time = as.POSIXct(df_day_1_bis$time)
+
+df_day_1 = df_day_1[colSums(is.na(df_day_1)) != nrow(df_day_1)]
+
+n_users = 32 
+# TODO:
+# cant merge because it is not the same year
+df_day_1_merged = merge(x = df_day_1, y = df_day_1_bis[, 1:((n_users + 3) -ncol(df_day_1))])
+
+df_day_1_merged = cbind(df_day_1, df_day_1_bis[, 2:((n_users + 3) -ncol(df_day_1))])
+
+colnames(df_day_1_merged) = c("time", "gen_1", paste0("cons_",1:n_users))
+  
+p = plot_initial(df_day_1_merged)
+
+
+
+#######################################################################################
+
 # generating fake info here: (should ask Eloi for new data)
-df_cons = cbind(df_cons, df_cons)
-colnames(df_cons)[17:32] = paste0(rep("cons_", 16),17:32)
+df_cons = df_day_1_merged[,grep(pattern = "cons", x = colnames(df_day_1_merged))]
+df_cons_sunny = df_cons[df_local_time$sunny,]
 
 n_binary_rep = log(ncol(df_cons), base=2)
 # TODO: should change this
@@ -78,17 +120,23 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # checking:
 # sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment
 
-
 # TODO: 
 # why the first run has this error? is it still appearing?
 # Error in gareal_lsSelection_Rcpp(object) :
 #   Too few positive probabilities!
+# (when hourly = F)
+
+# TODO: should define 2 setting features:
+# level of hippiesm (weight_surplus)
+# understand and set the parameters of each GA!
+
+
+
 tic = Sys.time()
-optimal_combination_using_2_GAs <- optimize_hourly_betas(n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment)
+optimal_combination_using_2_GAs <- optimize_hourly_betas(hourly = T, weight_surplus = 0.5, n_community_max, n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny, global_investment, individual_investment)
 toc = Sys.time()
 toc-tic
-
-
+# TODO: define more filters to reduce the number of possible combinations that will be introduced in the following optimization
 
 
 # for the mixed integer linear programming

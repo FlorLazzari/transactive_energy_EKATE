@@ -6,3 +6,5 @@ graphs
 
 # ignore files in workspace folder
 workspace
+
+.Rhistory

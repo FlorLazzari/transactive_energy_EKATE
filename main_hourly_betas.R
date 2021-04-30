@@ -79,6 +79,7 @@ global_investment = max(df[[1]]$energy, na.rm = T)*1100
 #######################################################################################
 
 d = 4
+m = 7 
 date = as.Date(paste0("2017-", m, "-", d))
 
 df_day_1_bis = meter_public[as.Date(meter_public$time) %in% date, ]

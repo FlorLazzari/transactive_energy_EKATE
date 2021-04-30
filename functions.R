@@ -323,7 +323,7 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
 }
 
 
-fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment, weight_surplus, payback_ideal){
+fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment_selected, weight_surplus, payback_ideal){
   
   # x = runif(dim, 0, 1)
   
@@ -359,14 +359,14 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
   
   # TODO: change the "sale_price * coefficients_x * sum(surplus_x)" 
   # this makes no sense with hourly betas
-  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid), colSums(surplus_x), colSums(grid))
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
   
   cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
   
-  payback_years = individual_investment / profit_one_year 
+  payback_years = individual_investment_selected / profit_one_year 
   
   # TODO:
   payback_years[is.na(payback_years)] = 100 
@@ -1107,7 +1107,7 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
   grid_x = df_cons_selected_day - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
-  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid), colSums(surplus_x), colSums(grid))
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
   
   cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   

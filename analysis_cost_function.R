@@ -21,7 +21,7 @@ library(parallel)
 library(purrr)
 source("functions.R")
 
-load("~/Documents/projects/EKATE/transactive_energy_EKATE/workspace/testing_cost_function.RData")
+# load("~/Documents/projects/EKATE/transactive_energy_EKATE/workspace/testing_cost_function.RData")
 
 
 ############################# select a combination #############################
@@ -276,9 +276,115 @@ plot_comparison_coefficients(df_gen = df_gen, df_cons_selected_users = df_cons[,
 
 
 
+library(nsga2R)
 
 
+fitness_MO <- function(x, df_gen_day, df_cons_selected_day, individual_investment_selected){
+  
+  # x = runif(dim, 0, 1)
+  
+  n_sunny_hours = nrow(df_cons_selected_day)
+  n_community = ncol(df_cons_selected_day)
+  
+  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients_x = coefficients_x/rowSums(coefficients_x)
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients = coefficients_x)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_day
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  f1_surplus = sum(surplus_x)
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_day)
+  
+  grid_x = df_cons_selected_day - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  payback_years = individual_investment_selected / profit_one_year 
+  
+  # TODO:
+  payback_years[is.na(payback_years)] = 10 
 
+  payback_ideal = 0
+  # TODO:
+  f2_payback = sum(exp(payback_years - payback_ideal))
+  
+  # TODO: add something like this
+  # cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
+
+  
+  # return(c(-f1_surplus, -f2_payback))
+  # took the minus sign because the optimization algo is set to minimize:
+  return(c(f1_surplus, f2_payback))
+}
+
+# fn: the fitness function to be minimized
+# varNo: Number of decision variables
+# objDim: Number of objective functions
+# lowerBounds: Lower bounds of each decision variable
+# upperBounds: Upper bounds of each decision variable
+# popSize: Size of population
+# generations: Number of generations
+
+# set.seed(123)
+
+fitness_MO(runif(dim, 0, 1),
+           df_gen_day = df_gen_day,
+           df_cons_selected_day = df_cons_selected_day,
+           individual_investment_selected = individual_investment_selected)
+
+optim <- nsga2R(fn = purrr::partial(fitness_MO, 
+                                    df_gen_day = df_gen_day,
+                                    df_cons_selected_day = df_cons_selected_day,
+                                    individual_investment_selected = individual_investment_selected),
+                varNo = dim, 
+                objDim = 2, 
+                generations = 100,
+                mprob = 0.2, 
+                popSize = 200, 
+                cprob = 0.8,
+                lowerBounds = rep(0, dim), 
+                upperBounds = rep(1, dim))
+
+
+df_pareto_objectives = data.frame(optim$objectives[optim$paretoFrontRank == 1, ])  
+# df_pareto = data.frame(optim$objectives)  
+
+colnames(df_pareto_objectives) = c("surplus", "payback")
+
+ggplot(df_pareto_objectives) + 
+  geom_point(aes(x = surplus, y = payback))
+
+# this should be 1? I cant understand how has he restricted the sum of her parameters to 1?? where in her code has she done it??
+# sum(optim$parameters[1, ])
+
+# choose one example:
+df_pareto_parameters = data.frame(optim$parameters[optim$paretoFrontRank == 1, ])  
+
+nrow(optim$parameters)
+ncol(optim$parameters)
+
+n_sunny_hours = nrow(df_cons_selected_day)
+n_community = ncol(df_cons_selected_day)
+
+df_pareto_parameters_1 = as.numeric(df_pareto_parameters[1, ])
+
+coefficients_1 = matrix(data = df_pareto_parameters_1, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+coefficients_1 = coefficients_1/rowSums(coefficients_1)
 
 
 

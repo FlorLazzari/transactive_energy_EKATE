@@ -337,8 +337,10 @@ fitness_MO <- function(x, df_gen_day, df_cons_selected_day, individual_investmen
 # objDim: Number of objective functions
 # lowerBounds: Lower bounds of each decision variable
 # upperBounds: Upper bounds of each decision variable
-# popSize: Size of population
+# popSize: Size of solution(?) population
 # generations: Number of generations
+# cprob: crossover prob
+# mprob: mutation prob
 
 # set.seed(123)
 
@@ -353,21 +355,24 @@ optim <- nsga2R(fn = purrr::partial(fitness_MO,
                                     individual_investment_selected = individual_investment_selected),
                 varNo = dim, 
                 objDim = 2, 
-                generations = 100,
-                mprob = 0.2, 
-                popSize = 200, 
+                generations = 500,
+                popSize = 200,
                 cprob = 0.8,
+                mprob = 0.2, 
                 lowerBounds = rep(0, dim), 
                 upperBounds = rep(1, dim))
 
 
 df_pareto_objectives = data.frame(optim$objectives[optim$paretoFrontRank == 1, ])  
-# df_pareto = data.frame(optim$objectives)  
-
 colnames(df_pareto_objectives) = c("surplus", "payback")
-
 ggplot(df_pareto_objectives) + 
   geom_point(aes(x = surplus, y = payback))
+
+df_pareto_objectives = data.frame(optim$objectives)
+colnames(df_pareto_objectives) = c("surplus", "payback")
+ggplot(df_pareto_objectives) + 
+  geom_point(aes(x = surplus, y = payback))
+
 
 # this should be 1? I cant understand how has he restricted the sum of her parameters to 1?? where in her code has she done it??
 # sum(optim$parameters[1, ])
@@ -385,6 +390,13 @@ df_pareto_parameters_1 = as.numeric(df_pareto_parameters[1, ])
 
 coefficients_1 = matrix(data = df_pareto_parameters_1, ncol = n_community, nrow = n_sunny_hours, byrow = T)
 coefficients_1 = coefficients_1/rowSums(coefficients_1)
+
+
+
+# now, which argument should I choose to select one point in the pareto front or another?
+# this will be the hippiesm-capitalist variable
+
+
 
 
 

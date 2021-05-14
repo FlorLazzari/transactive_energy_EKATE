@@ -7,7 +7,9 @@ library(reshape2)
 library(GA)
 library(parallel)
 library(purrr)
+library(nsga2R)
 source("functions.R")
+
 
 ############################# data reading #############################
 
@@ -41,6 +43,14 @@ filename_cons_17 = "data/202103181037_charts_historic.csv"
 filename_cons_18 = "data/202103181040_charts_historic.csv"
 
 
+### test
+# TODO:
+# check the time "CET/CEST" is this working ok?
+# resize the data set so it has the same structure as the other ones
+filename_cons_inergy = "data/wetransfer-2f7820/ExportHourlyConsumption.csv"
+# df = import_data_inergy(filename_1 = filename_cons_inergy)
+### 
+
 filenames_list = list(filename_gen_1, filename_cons_2, filename_cons_3, filename_cons_4, filename_cons_5, filename_cons_6, filename_cons_7, filename_cons_8, filename_cons_9, filename_cons_11, filename_cons_12, filename_cons_13, filename_cons_14, filename_cons_15, filename_cons_16, filename_cons_17, filename_cons_18)
 df = lapply(X = filenames_list, FUN = import_one_user)
 df_month_1 = select_month(df, m=7)
@@ -68,6 +78,7 @@ df_local_time = data.frame("time" = df_day_1[, "time"],
                            "date" = day(df_day_1[, "time"]), 
                            "hour" = hour(df_day_1[, "time"]), 
                            "sunny" = (df_gen$gen_1 != 0))
+
 df_gen_sunny = df_gen[df_local_time$sunny,]
 
 # should always use summer months to calculate the community max
@@ -77,6 +88,8 @@ n_community_max = 6
 global_investment = max(df[[1]]$energy, na.rm = T)*1100
 
 #######################################################################################
+
+meter_public = import_data_genome_project()
 
 d = 4
 m = 7 
@@ -134,7 +147,7 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 
 
 tic = Sys.time()
-optimal_combination_using_2_GAs <- optimize_hourly_betas(hourly = T, weight_surplus = 0.5, n_community_max, n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny, global_investment, individual_investment)
+optimal_combination_using_2_GAs <- optimize_hourly_betas_multi_objective(hourly = T, weight_surplus = 0.5, n_community_max, n_binary_rep, df_gen_sunny = df_gen_sunny, df_cons_sunny = df_cons_sunny, global_investment, individual_investment)
 toc = Sys.time()
 toc-tic
 # TODO: define more filters to reduce the number of possible combinations that will be introduced in the following optimization

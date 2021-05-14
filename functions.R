@@ -14,6 +14,35 @@ import_one_user <- function(filename_1){
 }
 
 
+import_data_inergy <- function(filename_1){
+  df <- read.csv(file = filename_1, header = TRUE, sep = ";")
+  colnames(df) <- c("id", "tariff", "time", "energy")
+  df$time <- as.POSIXct(as.character(df$time), format = "%d/%m/%Y %H:%M", tz = "Europe/Madrid") 
+  return(df)
+}
+
+
+import_data_genome_project <- function(){
+  
+  filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+  
+  meter = read.csv(file = filename, header = TRUE)
+  meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
+  
+  colnames(meter_public)[1] = "time" 
+  
+  # selecting users:
+  hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
+  
+  meter_public = meter_public[, c(1,order(hourly_mean)+1)]
+  meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
+  
+  # plot(meter_public[, 2])
+  
+  return(meter_public)
+}
+
+
 select_month <- function(df, m=6){
   
   # select only a random month just to start:
@@ -57,13 +86,88 @@ reducing_consumption_fake <- function(df){
 
 ############################# operative #############################
 
+optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_community_max, n_binary_rep, df_gen_sunny, df_cons_sunny, global_investment, individual_investment){
+  # TODO: understand the criteria of the keepBest = T
+  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
+  
+  # TODO: trying the hourly
+  pre_optimal_combinations <- optimization_1(hourly, n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
+  
+  # not all of the combinations are of the size = n_community_max (some are smaller)
+  
+  # TODO: separate the combinations according to the number n_community_per_combination
+  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
+  
+  # checking:
+  # n_community_per_combination[n_community_per_combination_order]
+  
+  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
+  n_community_vector = rowSums(pre_optimal_combinations)
+  
+  # will calculate everything for one day
+  # coefficients will be a matrix of dim = 24*n_community:
+  # will do a for loop to iterate for all the "types of days"
+  
+  hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
+  pre_surplus = colSums(hourly_surplus)
+  
+  # checking:
+  # colSums(pre_optimal_combinations)
+  # nrow(pre_optimal_combinations)
+  # hist(as.numeric(lapply(X = surplus, FUN = sum)))
+  # sum(df_gen)
+  
+  # new_optimum_coefficients = pre_optimum_coefficients
+  new_surplus = c()
+  new_optimum_coefficients = list()
+  new_payback = df_cons_sunny[0,1:ncol(df_cons_sunny)]
+
+  # pre_payback = pre_optimum_coefficients
+
+  j = 1
+  vector_i = c()
+  
+  for (i in 1:nrow(pre_optimal_combinations)) {
+
+    combination_selected = pre_optimal_combinations[i, ]
+    df_cons_selected_sunny = df_cons_sunny[,combination_selected==1]
+    individual_investment_max = individual_investment[combination_selected==1]  
+    
+    if (sum(individual_investment_max) > global_investment) { 
+      
+      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected, df_cons_selected_sunny, individual_investment_max)
+
+      combination_optimum = matrix(1, nrow = nrow(coefficients_criteria)) %*% combination_selected
+      combination_optimum[combination_optimum!=0] = coefficients_criteria
+      
+      new_optimum_coefficients[[j]] = coefficients_criteria
+      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients = coefficients_criteria)
+      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny, df_cons_selected_sunny))
+      new_surplus <- c(new_surplus, surplus)
+      
+      vector_i = c(vector_i, i)
+      j = j + 1
+    }
+  }
+  
+  results = list(
+    # "pre_optimum_coefficients" = pre_optimum_coefficients, 
+    "pre_surplus" = pre_surplus,
+    # "pre_payback" = pre_payback, 
+    "new_optimum_coefficients" = new_optimum_coefficients, 
+    "new_surplus" = new_surplus, 
+    "new_payback" = new_payback, 
+    "vector_i" = vector_i)
+  
+  return(results)
+}
+
 
 optimize_hourly_betas <- function(hourly, weight_surplus, n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
   
   # TODO: understand the criteria of the keepBest = T
   # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
-  
-  
+
   # TODO: trying the hourly
   pre_optimal_combinations <- optimization_1(hourly, n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen, df_cons = df_cons)
 
@@ -388,6 +492,76 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
 }
 
 
+fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, individual_investment_selected){
+
+  # checking:
+  # fitness_MO(runif(dim, 0, 1),
+  #            df_gen_day = df_gen_day,
+  #            df_cons_selected_day = df_cons_selected_day,
+  #            individual_investment_selected = individual_investment_selected)
+
+  # fn: the fitness function to be minimized
+  # varNo: Number of decision variables
+  # objDim: Number of objective functions
+  # lowerBounds: Lower bounds of each decision variable
+  # upperBounds: Upper bounds of each decision variable
+  # popSize: Size of solution(?) population
+  # generations: Number of generations
+  # cprob: crossover prob
+  # mprob: mutation prob
+  
+  
+  # x = runif(dim, 0, 1)
+  
+  n_sunny_hours = nrow(df_cons_selected_sunny)
+  n_community = ncol(df_cons_selected_sunny)
+  
+  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients_x = coefficients_x/rowSums(coefficients_x)
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_sunny
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  f1_surplus = sum(surplus_x)
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_sunny)
+  
+  grid_x = df_cons_selected_sunny - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  payback_years = individual_investment_selected / profit_one_year 
+  
+  # TODO:
+  payback_years[is.na(payback_years)] = 10 
+  
+  payback_ideal = 0
+  # TODO:
+  f2_payback = sum(exp(payback_years - payback_ideal))
+  
+  # TODO: add something like this
+  # cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
+  
+  
+  # return(c(-f1_surplus, -f2_payback))
+  # took the minus sign because the optimization algo is set to minimize:
+  return(c(f1_surplus, f2_payback))
+}
+
 ############################# analysis ############################## 
 
 
@@ -449,7 +623,7 @@ plot_best_combination <- function(best_combination, iteration){
 
 
 
-plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, df_local_time){
+plot_solar_consumption_daily_mean_betas <- function(name, df_gen, df_gen_assigned, df_cons_selected_users, df_local_time){
   
   m = unique(month(df_local_time$time))
   
@@ -468,7 +642,9 @@ plot_solar_consumption_daily_mean_betas <- function(df_gen, df_gen_assigned, df_
     geom_area(aes(x = df_plot_solar_consumption_mean[, "hour"], y = df_plot_solar_consumption_mean[, "value"], fill = df_plot_solar_consumption_mean[,"series"]), alpha = 0.5) +
     labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
   
-  return(p)
+  ggsave(filename = paste0("graphs/solar_assignation_",name), plot = p, device = "pdf", width = 5, height = 3)
+  
+  return()
 }
 
 
@@ -549,7 +725,7 @@ plot_disaggregated_daily_mean_per_user_betas <- function(df_gen_assigned, df_con
 }
 
 
-plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_cons_selected_users, df_local_time){
+plot_disaggregated_daily_mean_community_betas <- function(name, df_gen_assigned, df_cons_selected_users, df_local_time){
   
   df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
   colnames(df_gen_assigned) = colnames(df_cons_selected_users)
@@ -624,7 +800,7 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
-      grids() + 
+      # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
   }else if (n_community == 3){
     p <- ggplot() +
@@ -632,7 +808,7 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
-      grids() + 
+      # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
   }else if (n_community == 4){ 
     p <- ggplot() +
@@ -641,7 +817,7 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
-      grids() + 
+      # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
   }else if (n_community == 5){ 
     p <- ggplot() +
@@ -651,7 +827,7 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
-      grids() + 
+      # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)),fill = "")  
   }else if (n_community == 6){ 
     p <- ggplot() +
@@ -662,13 +838,13 @@ plot_disaggregated_daily_mean_community_betas <- function(df_gen_assigned, df_co
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
-      grids() + 
+      # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
   }else{ 
     print("n_community != 2:6")
   }
-
-  ggsave(filename = paste0("graphs/community"), plot = p, device = "pdf", width = 5, height = 3)
+ 
+  ggsave(filename = paste0("graphs/community_",name), plot = p, device = "pdf", width = 5, height = 3)
   
   return()
 }
@@ -845,10 +1021,10 @@ plot_optimization1_vs_optimization2 <- function(optimal_combination_using_2_GAs)
 }
 
 
-plot_comparison_coefficients <- function(df_gen, df_cons_selected_users, matrix_coefficients_1, matrix_coefficients_2, df_local_time){
+plot_comparison_coefficients <- function(df_gen, df_gen_sunny, df_cons_selected_users_sunny, df_cons_selected_users, matrix_coefficients_1 , matrix_coefficients_2, df_local_time){
   
-  df_gen_sunny = df_gen[df_local_time$sunny, ]
-  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  # df_gen_sunny = df_gen[df_local_time$sunny, ]
+  # df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
   
   df_gen_assigned_1 = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients_1)
   colnames(df_gen_assigned_1) = colnames(df_cons_selected_users)
@@ -932,6 +1108,113 @@ plot_comparison_coefficients <- function(df_gen, df_cons_selected_users, matrix_
   ggsave(filename = paste0("graphs/surplus_comparison"), plot = p, device = "pdf", width = 8, height = 3)
 }
 
+
+plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_selected, df_cons_selected_sunny, matrix_coefficients_list, df_local_time){
+  
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  df_costs_comparison = df_cons_selected 
+  df_costs_comparison[,] = 0
+  df_costs_comparison = df_costs_comparison[1:length(matrix_coefficients_list),]
+  df_costs_comparison$i_matrix = 0
+
+  df_solar_surplus_comparison = df_cons_selected 
+  df_solar_surplus_comparison[,] = 0
+  df_solar_surplus_comparison = df_solar_surplus_comparison[1:length(matrix_coefficients_list),]
+  df_solar_surplus_comparison$i_matrix = 0
+  
+  # cost_old = colSums(purchase_price*df_cons_selected)
+  # cost_old_one_year = cost_old * 360 
+  # cost_old_20_years = cost_old_one_year * 20
+  # 
+  # solar_surplus_old[] = 0
+
+  for (i in 1:length(matrix_coefficients_list)) {
+    
+    matrix_coefficients = matrix_coefficients_list[[i]]
+    
+    df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
+    colnames(df_gen_assigned) = colnames(df_cons_selected)
+    
+    solar_surplus <- df_gen_assigned - df_cons_selected_sunny
+    solar_surplus[solar_surplus < 0] = 0
+
+    grid = df_cons_selected_sunny - df_gen_assigned
+    grid[grid < 0] = 0
+
+    df_cons_selected$hour = df_local_time$hour
+    
+    grid$hour = df_local_time$hour[df_local_time$sunny]
+    grid = rbind(grid, df_cons_selected[!df_cons_selected$hour %in% grid$hour,])
+
+    df_cons_selected = df_cons_selected[, -ncol(df_cons_selected)]
+    grid = grid[, -ncol(grid)]
+
+    solar_surplus_to_sell = ifelse(colSums(solar_surplus) < colSums(grid), colSums(solar_surplus), colSums(grid))
+
+    cost_sun = purchase_price*colSums(grid) - sale_price * solar_surplus_to_sell
+    cost_sun_one_year = cost_sun * 360 
+    cost_sun_20_years = cost_sun_one_year * 20
+
+    df_costs_comparison[i, ] = c(cost_sun_20_years, i) 
+    df_solar_surplus_comparison[i, ] = c(colSums(solar_surplus), i)
+
+  }
+
+  costs_comparison = melt(data = df_costs_comparison, id.vars = "i_matrix") 
+  costs_comparison$i_matrix = factor(costs_comparison$i_matrix)
+  
+  p <- ggplot() +
+    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/costs_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
+  
+
+  surplus_comparison = melt(data = df_solar_surplus_comparison, id.vars = "i_matrix") 
+  surplus_comparison$i_matrix = factor(df_solar_surplus_comparison$i_matrix)
+
+  p <- ggplot() +
+    geom_bar(aes(x = surplus_comparison$variable,  y = surplus_comparison$value, fill = surplus_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/surplus_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
+
+  ##
+
+  costs_comparison_aggregated = data.frame("i_matrix" = df_costs_comparison$i_matrix, "value" =rowSums(df_costs_comparison[, -ncol(df_costs_comparison)]))
+  costs_comparison_aggregated$i_matrix = factor(costs_comparison_aggregated$i_matrix)
+  p <- ggplot() +
+    geom_bar(aes(x = costs_comparison_aggregated$i_matrix, y = costs_comparison_aggregated$value, fill = costs_comparison_aggregated$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/costs_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
+
+  surplus_comparison_aggregated = data.frame("i_matrix" = df_solar_surplus_comparison$i_matrix, "value" =rowSums(df_solar_surplus_comparison[, -ncol(df_solar_surplus_comparison)]))
+  surplus_comparison_aggregated$i_matrix = factor(surplus_comparison_aggregated$i_matrix)
+  p <- ggplot() +
+    geom_bar(aes(x = surplus_comparison_aggregated$i_matrix, y = surplus_comparison_aggregated$value, fill = costs_comparison_aggregated$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/surplus_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
+  
+  return()
+}
+
+
+plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star, x_lineal, y_lineal, objectives_with_criteria){
+  
+  r = (sum(c(objectives_with_criteria$surplus, objectives_with_criteria$payback) - z_star)**2)**0.5  
+  
+  theta = seq(from = 0, to = (2*pi), length.out = 100)
+  x_circular = z_star$surplus + r * cos(theta)
+  y_circular = z_star$payback + r * sin(theta)
+  
+  
+  
+  p = ggplot() +
+    geom_point(aes(x = df_pareto_objectives$surplus, y = df_pareto_objectives$payback)) +
+    geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) + 
+    geom_line(aes(x = x_lineal, y = y_lineal)) + 
+    geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) + 
+    geom_point(aes(x = x_circular, y = y_circular))
+  ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
+
+  return(p)
+}
 
 
 ############################# AUX - main #############################
@@ -1130,6 +1413,118 @@ calculate_dim <- function(hourly, n_community, n_sunny_hours){
     dim = n_community
   }
   return(dim)
+}
+
+
+selection_according_to_criteria <- function(optim, n_community, n_sunny_hours){
+  
+  # now, which argument should I choose to select one point in the pareto front or another?
+  # this will be the hippiesm-capitalist variable
+  
+  # TODO: first try to understand how to define the 0.5 point (weight) in the pareto curve 
+  
+  # df_pareto_objectives = data.frame(optim$objectives[optim$paretoFrontRank == 1, ])  
+  
+  df_pareto_objectives = data.frame(optim$objectives)  
+  colnames(df_pareto_objectives) = c("surplus", "payback")
+  
+  rank_1 = (optim$paretoFrontRank == 1)
+  
+  # TODO: work here!! DEFINE THE CRITERIA FUNCTION
+  # df_pareto_objectives = df_pareto_objectives[rank_1, ]
+  # ggplot(df_pareto_objectives) +
+  #   geom_point(aes(x = surplus, y = payback))
+  
+  # TODO:
+  # should compare the objectives (with the weights) for the different df_pareto_parameters (from each row)
+  # and decide with with row to select as the optim_betas 
+  # for example, if we selected the row = 1:
+  
+  # TODO: here should select one of all of the possibilities in rank_1
+  
+  # z_star = data.frame("surplus" = df_pareto_objectives$surplus[which.max(df_pareto_objectives$payback)],
+  #                     "payback" = df_pareto_objectives$payback[which.max(df_pareto_objectives$surplus)])
+  
+  z_star = data.frame("surplus" = min(df_pareto_objectives$surplus), 
+                      "payback" = min(df_pareto_objectives$payback))
+  
+  
+  # TODO: take the mean of all the differences? starting from top to bottom, ending in the middle
+  m = -((max(df_pareto_objectives$payback) - z_star$payback)/(max(df_pareto_objectives$surplus) - z_star$surplus))
+  c = z_star$payback - m*z_star$surplus 
+  
+  lineal = function(x, m, c){
+    y = m*x + c
+    return(y)
+  }
+  
+  x_lineal = c( (z_star$surplus - 0.1 * max(df_pareto_objectives$surplus)) : (max(df_pareto_objectives$surplus) + 0.1 * max(df_pareto_objectives$surplus)) )
+  y_lineal = lineal(x = x_lineal, m, c)
+  
+  df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
+  
+  rank_1_criteria = calculate_criteria_selected_row(df_pareto_objectives_rank_1, z_star)
+  
+  
+  df_pareto_betas = data.frame(optim$parameters)  
+  df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
+  
+  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria, ])
+  
+  coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients = coefficients/rowSums(coefficients)
+  
+  objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  plot_multi_objective_criteria_selection(df_pareto_objectives, z_star, x_lineal, y_lineal, objectives_with_criteria)
+  
+  return(coefficients)
+}
+
+
+calculate_criteria_selected_row = function(df_pareto_objectives_rank_1, z_star){
+  
+  # TODO: the calculus of the linear should be included here:
+  z_star_long = data.frame(matrix(1, nrow = nrow(df_pareto_objectives_rank_1)) %*% as.matrix(z_star))   
+  
+  criteria_selected_row = as.numeric(which.min(rowSums(df_pareto_objectives_rank_1 - z_star_long)**2))
+  rank_1_criteria = 1:nrow(df_pareto_objectives_rank_1) %in% criteria_selected_row
+  return(rank_1_criteria)
+}
+
+
+optimize_hourly_betas_multi_objective_per_combination <- function(combination_selected, df_cons_selected_sunny, individual_investment_max){
+  
+  n_community = as.numeric(n_community_vector[i])
+  
+  # x just selects the users, no need to calculate the optimum combination here
+  # I think calculating the coeffs should be inside the "inside GA"
+  # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+  
+  individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+  
+  n_sunny_hours = nrow(df_cons_selected_sunny)      
+  dim = calculate_dim(hourly, n_community, n_sunny_hours)
+  
+  
+  # TODO: how does the algorithm knows that the GA's type is = "real-valued"??
+  
+  optim <- nsga2R(fn = purrr::partial(fitness_MO, 
+                                      df_gen_sunny = df_gen_sunny,
+                                      df_cons_selected_sunny = df_cons_selected_sunny,
+                                      individual_investment_selected = individual_investment_selected),
+                  varNo = dim, 
+                  objDim = 2, 
+                  generations = 100,
+                  popSize = 200,
+                  cprob = 0.8,
+                  mprob = 0.2, 
+                  lowerBounds = rep(0, dim), 
+                  upperBounds = rep(1, dim))
+  
+  # TODO: how to avoid verbosity/printing? 
+  
+  coefficients_criteria = selection_according_to_criteria(optim, n_community, n_sunny_hours)
+  return(coefficients_criteria)
 }
 
 

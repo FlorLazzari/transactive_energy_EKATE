@@ -36,7 +36,7 @@ for (i in 1:nrow(pre_optimal_combinations)) {
 
 pre_optimal_combinations_to_study = as.numeric(which(possible_combinations &  c(pre_surplus != 0)))
 
-pre_surplus[pre_optimal_combinations_to_study[1]]
+pre_surplus[pre_optimal_combinations_to_study[9]]
 
 ############################# select a combination #############################
 
@@ -54,7 +54,7 @@ pre_surplus[pre_optimal_combinations_to_study[1]]
 # which(pre_surplus<5 & pre_surplus>4)
 
 # took 1 as an example:
-i = pre_optimal_combinations_to_study[1]
+i = pre_optimal_combinations_to_study[5]
 
 combination_selected = pre_optimal_combinations[i, ]
 df_cons_selected_sunny = df_cons_sunny[,combination_selected==1]
@@ -89,9 +89,9 @@ pre_matrix_coefficients = calculate_matrix_coefficients(df_gen_sunny, df_cons_se
 # TODO: this should be inside the calculate_matrix_coefficients
 pre_matrix_coefficients = matrix(pre_matrix_coefficients, nrow = n_sunny_hours, ncol = n_community)
 
-pre_surplus = calculate_surplus_hourly_individual_betas(pre_matrix_coefficients, df_gen_sunny, df_cons_selected_sunny)
+pre_surplus__ = calculate_surplus_hourly_individual_betas(pre_matrix_coefficients, df_gen_sunny, df_cons_selected_sunny)
 
-sum(pre_surplus)
+sum(pre_surplus__)
 
 pre_payback = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, pre_matrix_coefficients)
 
@@ -122,7 +122,7 @@ plot_disaggregated_daily_mean_community_betas(name = "equitative_distribution", 
 
 dim = calculate_dim(hourly, n_community, n_sunny_hours)
 
-coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected, df_cons_selected_sunny, individual_investment_max)
+coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected = combination_selected, n_community,df_gen_sunny = df_gen_sunny, df_cons_selected_sunny = df_cons_selected_sunny, individual_investment_max)
 
 new_payback = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients = coefficients_criteria)
 surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny, df_cons_selected_sunny))

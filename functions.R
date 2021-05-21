@@ -22,7 +22,7 @@ import_data_inergy <- function(filename_1){
 }
 
 
-import_data_genome_project <- function(){
+import_data_genome_project_public <- function(){
   
   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
   
@@ -40,6 +40,48 @@ import_data_genome_project <- function(){
   # plot(meter_public[, 2])
   
   return(meter_public)
+}
+
+
+import_data_genome_project_public <- function(){
+  
+  filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+  
+  meter = read.csv(file = filename, header = TRUE)
+  meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
+  
+  colnames(meter_public)[1] = "time" 
+  
+  # selecting users:
+  hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
+  
+  meter_public = meter_public[, c(1,order(hourly_mean)+1)]
+  meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
+  
+  # plot(meter_public[, 2])
+  
+  return(meter_public)
+}
+
+
+import_data_genome_project_office <- function(){
+  
+  filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+  
+  meter = read.csv(file = filename, header = TRUE)
+  meter_office = meter[, c(1, grep(pattern = "office", x = colnames(meter)))]
+  
+  colnames(meter_office)[1] = "time" 
+  
+  # selecting users:
+  hourly_mean = colMeans(meter_office[2:ncol(meter_office)], na.rm = T)
+  
+  meter_office = meter_office[, c(1,order(hourly_mean)+1)]
+  meter_office = meter_office[, c(1:as.numeric(which(colMeans(meter_office[2:ncol(meter_office)], na.rm = T) > 25)[1]))]
+  
+  # plot(meter_public[, 2])
+  
+  return(meter_office)
 }
 
 
@@ -135,13 +177,13 @@ optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_comm
     
     if (sum(individual_investment_max) > global_investment) { 
       
-      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected, df_cons_selected_sunny, individual_investment_max)
+      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max)
 
       combination_optimum = matrix(1, nrow = nrow(coefficients_criteria)) %*% combination_selected
       combination_optimum[combination_optimum!=0] = coefficients_criteria
       
       new_optimum_coefficients[[j]] = coefficients_criteria
-      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients = coefficients_criteria)
+      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_max, matrix_coefficients = coefficients_criteria)
       surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny, df_cons_selected_sunny))
       new_surplus <- c(new_surplus, surplus)
       
@@ -600,6 +642,7 @@ plot_initial <- function(df){
     geom_line(aes(df_plot$time, df_plot$value , color = df_plot$series)) +
     # geom_area(aes(x = df_sum$time, y = df_sum$consumption_sum), alpha = 0.5) +
     labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
+  # ggsave(filename = "graphs/initial", plot = p, device = "pdf", width = 6, height = 3)
   
   return(p)
 }
@@ -1202,16 +1245,14 @@ plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star
   theta = seq(from = 0, to = (2*pi), length.out = 100)
   x_circular = z_star$surplus + r * cos(theta)
   y_circular = z_star$payback + r * sin(theta)
-  
-  
-  
+
   p = ggplot() +
     geom_point(aes(x = df_pareto_objectives$surplus, y = df_pareto_objectives$payback)) +
-    geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) + 
-    geom_line(aes(x = x_lineal, y = y_lineal)) + 
-    geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) + 
+    geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) +
+    geom_line(aes(x = x_lineal, y = y_lineal)) +
+    geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) +
     geom_point(aes(x = x_circular, y = y_circular))
-  ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
+  # ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
 
   return(p)
 }
@@ -1461,6 +1502,9 @@ selection_according_to_criteria <- function(optim, n_community, n_sunny_hours){
   x_lineal = c( (z_star$surplus - 0.1 * max(df_pareto_objectives$surplus)) : (max(df_pareto_objectives$surplus) + 0.1 * max(df_pareto_objectives$surplus)) )
   y_lineal = lineal(x = x_lineal, m, c)
   
+  # x_lineal = z_star$surplus
+  # y_lineal = z_star$payback
+  
   df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
   
   rank_1_criteria = calculate_criteria_selected_row(df_pareto_objectives_rank_1, z_star)
@@ -1492,13 +1536,13 @@ calculate_criteria_selected_row = function(df_pareto_objectives_rank_1, z_star){
 }
 
 
-optimize_hourly_betas_multi_objective_per_combination <- function(combination_selected, df_cons_selected_sunny, individual_investment_max){
-  
-  n_community = as.numeric(n_community_vector[i])
+optimize_hourly_betas_multi_objective_per_combination <- function(combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max){
   
   # x just selects the users, no need to calculate the optimum combination here
   # I think calculating the coeffs should be inside the "inside GA"
   # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
+  
+  n_community = sum(combination_selected)
   
   individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
   

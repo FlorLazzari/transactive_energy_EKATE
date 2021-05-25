@@ -141,6 +141,7 @@ plot_disaggregated_daily_mean_community_betas(name = "taking_into_account_paybac
 
 # this function contains the "plot_economic_comparison_betas"
 
+
 matrix_coefficients_list = list()
 
 matrix_coefficients_list[[1]] = pre_matrix_coefficients 
@@ -168,32 +169,10 @@ plot_comparison_coefficients_upgraded(df_gen, df_gen_sunny, df_cons_selected, df
 # will try changing this
 
 
-
-
-library(seriation)
-set.seed(2)
-
 # comparison of matrixes:
 # TODO: graphical comparison of matrixes?
-# pre_matrix_coefficients vs matrix_coefficients_optimum 
 
 plot_matrix(name = "3", matrix_coefficients_list[[3]])
 
-plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]]){
-  
-  rownames(matrix_coefficients) = NULL
-  longData = melt(matrix_coefficients)
-  longData = longData[longData$value!=0,]
-  
-  p <- ggplot(longData, aes(x = Var2, y = Var1)) + 
-    geom_raster(aes(fill=value)) + 
-    scale_fill_gradient(low="grey90", high="red") +
-    labs(x="users", y="daytime", title="") +
-    theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
-                       axis.text.y=element_text(size=9),
-                       plot.title=element_text(size=11))
-  ggsave(filename = paste0("graphs/matrix_",name), plot = p, device = "pdf", width = 6, height = 3)
-  return()
-}
 
 

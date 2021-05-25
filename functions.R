@@ -177,7 +177,7 @@ optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_comm
     
     if (sum(individual_investment_max) > global_investment) { 
       
-      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max)
+      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(hourly, combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max)
 
       combination_optimum = matrix(1, nrow = nrow(coefficients_criteria)) %*% combination_selected
       combination_optimum[combination_optimum!=0] = coefficients_criteria
@@ -396,8 +396,8 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
                       popSize = 200, maxiter = 100, run = 50,
                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
                       keepBest = T,
-                      pmutation = 0.3 
-  )
+                      pmutation = 0.3
+                      )
   # TODO: understand: popSize should be simmilar to the combinatorial??
   # look for: relation between popSize and dimension of the space (number of possible combinations) 
   # TODO: work a better crossover, now is being done a uCrossover in "pieces"
@@ -642,7 +642,7 @@ plot_initial <- function(df){
     geom_line(aes(df_plot$time, df_plot$value , color = df_plot$series)) +
     # geom_area(aes(x = df_sum$time, y = df_sum$consumption_sum), alpha = 0.5) +
     labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
-  # ggsave(filename = "graphs/initial", plot = p, device = "pdf", width = 6, height = 3)
+  ggsave(filename = "graphs/initial", plot = p, device = "pdf", width = 6, height = 3)
   
   return(p)
 }
@@ -1152,7 +1152,7 @@ plot_comparison_coefficients <- function(df_gen, df_gen_sunny, df_cons_selected_
 }
 
 
-plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_selected, df_cons_selected_sunny, matrix_coefficients_list, df_local_time){
+plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_selected, df_cons_selected_sunny, matrix_coefficients_list, df_local_time, individual_investment_selected){
   
   purchase_price = 0.14859
   sale_price = 0.0508
@@ -1167,11 +1167,13 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
   df_solar_surplus_comparison = df_solar_surplus_comparison[1:length(matrix_coefficients_list),]
   df_solar_surplus_comparison$i_matrix = 0
   
-  # cost_old = colSums(purchase_price*df_cons_selected)
-  # cost_old_one_year = cost_old * 360 
-  # cost_old_20_years = cost_old_one_year * 20
-  # 
-  # solar_surplus_old[] = 0
+  df_payback_years_comparison = df_cons_selected
+  df_payback_years_comparison[,] = 0
+  df_payback_years_comparison = df_payback_years_comparison[1:length(matrix_coefficients_list),]
+  df_payback_years_comparison$i_matrix = 0
+
+  cost_old = colSums(purchase_price*df_cons_selected)
+  cost_old_one_year = cost_old * 360
 
   for (i in 1:length(matrix_coefficients_list)) {
     
@@ -1203,6 +1205,13 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
     df_costs_comparison[i, ] = c(cost_sun_20_years, i) 
     df_solar_surplus_comparison[i, ] = c(colSums(solar_surplus), i)
 
+    profit_period = cost_old - cost_sun
+    profit_one_year = profit_period * 360 
+    
+    payback_years_comparison = individual_investment_selected / profit_one_year
+    df_payback_years_comparison[i, ] = c(payback_years_comparison, i)
+    # TODO: for the case where there is no PV installation (coeff = 0) if I keep payback = 100000 as in the cost function then the plot only shows this value
+    df_payback_years_comparison[i, df_payback_years_comparison[i, ] > 10**13] = NA 
   }
 
   costs_comparison = melt(data = df_costs_comparison, id.vars = "i_matrix") 
@@ -1233,7 +1242,34 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
   p <- ggplot() +
     geom_bar(aes(x = surplus_comparison_aggregated$i_matrix, y = surplus_comparison_aggregated$value, fill = costs_comparison_aggregated$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/surplus_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
+
+  ## the costs comparison aggregated is almost the same for all the scenarios
+
+  investment_comparison = data.frame("i_matrix" = df_costs_comparison$i_matrix, "value" = individual_investment_selected)
+  investment_comparison$i_matrix = factor(investment_comparison$i_matrix)
+  p <- ggplot() +
+    geom_bar(aes(x = investment_comparison$i_matrix, y = investment_comparison$value, fill = investment_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7))
+  ggsave(filename = paste0("graphs/individual_investment_comparison"), plot = p, device = "pdf", width = 8, height = 3)
+
+  ##
+
+  payback_comparison = melt(data = df_payback_years_comparison, id.vars = "i_matrix") 
+  payback_comparison$i_matrix = factor(df_payback_years_comparison$i_matrix)
   
+  p <- ggplot() +
+    geom_bar(aes(x = payback_comparison$variable,  y = payback_comparison$value, fill = payback_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
+
+  ##
+
+  payback_ideal = 0
+  payback_comparison_exp = data.frame("i_matrix" = df_payback_years_comparison$i_matrix, "value" = rowSums(exp(df_payback_years_comparison[, -ncol(df_payback_years_comparison)] - payback_ideal)))
+  payback_comparison_exp$i_matrix = factor(payback_comparison_exp$i_matrix)
+
+  p <- ggplot() +
+    geom_bar(aes(x = payback_comparison_exp$i_matrix, y = payback_comparison_exp$value, fill = payback_comparison_exp$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  ggsave(filename = paste0("graphs/payback_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
+
   return()
 }
 
@@ -1255,6 +1291,24 @@ plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star
   # ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
 
   return(p)
+}
+
+
+plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]]){
+  
+  rownames(matrix_coefficients) = NULL
+  longData = melt(matrix_coefficients)
+  longData = longData[longData$value!=0,]
+  
+  p <- ggplot(longData, aes(x = Var2, y = Var1)) + 
+    geom_raster(aes(fill=value)) + 
+    scale_fill_gradient(low="grey90", high="red") +
+    labs(x="users", y="daytime", title="") +
+    theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
+                       axis.text.y=element_text(size=9),
+                       plot.title=element_text(size=11))
+  ggsave(filename = paste0("graphs/matrix_",name), plot = p, device = "pdf", width = 6, height = 3)
+  return()
 }
 
 
@@ -1536,7 +1590,7 @@ calculate_criteria_selected_row = function(df_pareto_objectives_rank_1, z_star){
 }
 
 
-optimize_hourly_betas_multi_objective_per_combination <- function(combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max){
+optimize_hourly_betas_multi_objective_per_combination <- function(hourly, combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max){
   
   # x just selects the users, no need to calculate the optimum combination here
   # I think calculating the coeffs should be inside the "inside GA"

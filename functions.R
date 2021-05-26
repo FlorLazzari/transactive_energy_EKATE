@@ -22,64 +22,109 @@ import_data_inergy <- function(filename_1){
 }
 
 
-import_data_genome_project_public <- function(){
+# import_data_genome_project_public <- function(){
+#   
+#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+#   
+#   meter = read.csv(file = filename, header = TRUE)
+#   meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
+#   
+#   colnames(meter_public)[1] = "time" 
+#   
+#   # selecting users:
+#   hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
+#   
+#   meter_public = meter_public[, c(1,order(hourly_mean)+1)]
+#   meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
+#   
+#   # plot(meter_public[, 2])
+#   meter_public$time = as.POSIXct(meter_public$time)
+#     
+#   return(meter_public)
+# }
+
+
+# import_data_genome_project_public <- function(selected_year_consumption){
+#   
+#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+#   
+#   meter = read.csv(file = filename, header = TRUE)
+#   meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
+#   
+#   colnames(meter_public)[1] = "time" 
+#   
+#   # selecting users:
+#   hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
+#   
+#   meter_public = meter_public[, c(1,order(hourly_mean)+1)]
+#   meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
+#   
+#   # plot(meter_public[, 2])
+#   meter_public$time = as.POSIXct(meter_public$time)
+# 
+#   meter_public = meter_public[as.Date(meter_public$time) %in% as.Date(selected_year_consumption), ]
+# 
+#   # filter columns with all nas:
+#   meter_public = meter_public[colSums(is.na(meter_public)) != nrow(meter_public)]
+#   
+#   # filter columns with some na: (this filters too much)
+#   # meter_public = meter_public[colSums(is.na(meter_public)) == 0]
+# 
+#   return(meter_public)
+# }
+# 
+# 
+# import_data_genome_project_office <- function(selected_year_consumption){
+#   
+#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+#   
+#   meter = read.csv(file = filename, header = TRUE)
+#   meter_office = meter[, c(1, grep(pattern = "office", x = colnames(meter)))]
+#   
+#   colnames(meter_office)[1] = "time" 
+#   
+#   # selecting users:
+#   hourly_mean = colMeans(meter_office[2:ncol(meter_office)], na.rm = T)
+#   
+#   meter_office = meter_office[, c(1,order(hourly_mean)+1)]
+#   meter_office = meter_office[, c(1:as.numeric(which(colMeans(meter_office[2:ncol(meter_office)], na.rm = T) > 25)[1]))]
+#   
+#   meter_office$time = as.POSIXct(meter_office$time)
+# 
+#   # plot(meter_public[, 2])
+#   
+#   meter_office = meter_office[as.Date(meter_office$time) %in% as.Date(selected_year_consumption), ]
+#   
+#   # filter columns with nas:
+#   meter_office = meter_office[colSums(is.na(meter_office)) != nrow(meter_office)]
+#   
+#   return(meter_office)
+# }
+# 
+
+import_data_genome_project <- function(selected_year_consumption){
   
   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
   
   meter = read.csv(file = filename, header = TRUE)
-  meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
+  meter = meter[, c(1, grep(pattern = "public|office|education", x = colnames(meter)))]
   
-  colnames(meter_public)[1] = "time" 
+  colnames(meter)[1] = "time" 
   
   # selecting users:
-  hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
+  hourly_mean = colMeans(meter[2:ncol(meter)], na.rm = T)
   
-  meter_public = meter_public[, c(1,order(hourly_mean)+1)]
-  meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
+  meter = meter[, c(1,order(hourly_mean)+1)]
+  meter = meter[, c(1:as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 25)[1]))]
+  
+  meter$time = as.POSIXct(meter$time)
   
   # plot(meter_public[, 2])
   
-  return(meter_public)
-}
-
-
-import_data_genome_project_public <- function(){
+  meter = meter[as.Date(meter$time) %in% as.Date(selected_year_consumption), ]
   
-  filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-  
-  meter = read.csv(file = filename, header = TRUE)
-  meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
-  
-  colnames(meter_public)[1] = "time" 
-  
-  # selecting users:
-  hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
-  
-  meter_public = meter_public[, c(1,order(hourly_mean)+1)]
-  meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
-  
-  # plot(meter_public[, 2])
-  
-  return(meter_public)
-}
-
-
-import_data_genome_project_office <- function(){
-  
-  filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-  
-  meter = read.csv(file = filename, header = TRUE)
-  meter_office = meter[, c(1, grep(pattern = "office", x = colnames(meter)))]
-  
-  colnames(meter_office)[1] = "time" 
-  
-  # selecting users:
-  hourly_mean = colMeans(meter_office[2:ncol(meter_office)], na.rm = T)
-  
-  meter_office = meter_office[, c(1,order(hourly_mean)+1)]
-  meter_office = meter_office[, c(1:as.numeric(which(colMeans(meter_office[2:ncol(meter_office)], na.rm = T) > 25)[1]))]
-  
-  # plot(meter_public[, 2])
+  # filter columns with nas:
+  meter = meter[colSums(is.na(meter)) != nrow(meter)]
   
   return(meter_office)
 }
@@ -1366,6 +1411,56 @@ select_best_combinations_betas <- function(optimal_combination_using_2_GAs){
               "surplus" = surplus, 
               "payback" = payback))
 }  
+
+
+calculate_characteristic_days <- function(df, number_selected_year){
+  
+  colnames(df) = c("time", "energy")
+  df_characteristic = list()
+  for (m in 1:12) {
+    
+    if (m < 11) {
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
+    }else{
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year+1),"-",1,"-01")), by = "day")      
+    }
+    
+    days_month = days_month[-length(days_month)]
+    
+    days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
+    days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
+    
+    ##
+    
+    df_mean = data.frame("hour" = 0:23, "energy" = 0)
+    
+    df_month_week = df[as.Date(df$time) %in% days_month_week, ]
+    df_month_clean = df_month_week[!is.na(df_month_week$energy), ]
+    
+    df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
+    colnames(df_mean_incomplete) = c("hour", "energy")
+    
+    df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+    df_mean_week = df_mean
+    
+    ##
+    
+    df_mean = data.frame("hour" = 0:23, "energy" = 0)
+    
+    df_month_end_week = df[as.Date(df$time) %in% days_month_end_week, ]
+    df_month_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
+    
+    df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
+    colnames(df_mean_incomplete) = c("hour", "energy")
+    
+    df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+    df_mean_end_week = df_mean
+    
+    df_characteristic[[m]] = rbind(df_mean_week, df_mean_end_week)
+  }
+  
+  return(df_characteristic)
+}
 
 
 ############################# AUX - operative #############################

@@ -11,102 +11,99 @@ library(nsga2R)
 source("functions.R")
 
 
-############################# select year #############################
+############################# select year periods #############################
 
-# TODO: check the date is different from the time
-
-selected_year = seq(from = as.POSIXct("2017-01-01 00:00:00"), to = as.POSIXct("2017-12-31 00:00:00"), by = "hour")
-
-df_local_time = data.frame("time" = selected_year, 
-                           "month" = month(selected_year),
-                           "date" = as.Date(selected_year), 
-                           "hour" = hour(selected_year))
+selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")
+selected_year_consumption = seq(from = as.POSIXct("2018-01-01 00:00:00"), to = as.POSIXct("2018-12-31 00:00:00"), by = "hour")
 
 ############################# data reading (barcelona - PV generation) #############################
 
-filename_gen_1 = "data/202005081411_charts_compare_changedTo2017.csv"
+filename_gen_1 = "data/202105251031_charts_compare.csv"
+
 df_gen = import_one_user(filename_1 = filename_gen_1)
-# df = eliminate_outliers(df)
-
-# p = plot_initial(df_gen)
-
 colnames(df_gen) = c("time", "gen_1")
+df_gen$gen_1[df_gen$gen_1 == 0] = NA
+df_gen = eliminate_outliers(df_gen)
 
-# changing NAs to 0
-df_gen[is.na(df_gen)] = 0
+p = plot_initial(df_gen)
 
-df_gen = df_gen[as.Date(df_gen$time) %in% df_local_time$date, ]
+df_gen = df_gen[as.Date(df_gen$time) %in% as.Date(selected_year_generation), ]
 
-df_local_time$date %in% as.Date(df_gen$time)
+df_local_time_gen = data.frame("time" = selected_year_generation, 
+                               "month" = month(selected_year_generation),
+                               "date" = as.Date(selected_year_generation), 
+                               "hour" = hour(selected_year_generation))
 
-merge(x = data.frame("time" = df_local_time[, "time"]), y = df_gen, by = "time")
- 
-df_local_time$sunny = (df_gen$gen_1 != 0)
+# problem here:
+# df_local_time_gen$time[df_local_time_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST")]
+# df_gen$time[df_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST")]
 
-df_gen_sunny = df_gen[df_local_time$sunny,]
+# df_gen[7150:7160,]
+# df_gen_2[7150:7160,]
+
+# will remove the second value 
+
+df_gen = merge(x = data.frame("time" = df_local_time_gen[, "time"]), y = df_gen, by.x = "time", all.x = T)
+
+to_remove = which(df_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST"))
+df_gen = df_gen[-to_remove, ]
+p = plot_initial(df_gen)
+
+df_local_time_gen$sunny = (df_gen$gen_1 != 0 & !is.na(df_gen$gen_1))
+df_gen_sunny = df_gen[df_local_time_gen$sunny,]
+p = plot_initial(df_gen)
+
+# define characteristic days for each month 
+df_gen_characteristic = calculate_characteristic_days(df = df_gen, number_selected_year = unique(year(selected_year_generation)))
+
+# checking:
+# plot(x = 1:nrow(df_gen_characteristic[[12]]), y = df_gen_characteristic[[12]]$energy)
 
 ############################# data reading (genome project - public) #############################
 
-meter_public = import_data_genome_project_public()
+selected_year_consumption = seq(from = as.POSIXct("2017-01-01 00:00:00"), to = as.POSIXct("2017-12-31 00:00:00"), by = "hour")
 
+df_meter_public = import_data_genome_project_public(selected_year_consumption)
+# cheeting, problems with NAs:
+df_meter_public = df_meter_public[, -c(9, 19)]
 
+df_meter_public_characteristic = data.frame("time_int"=sort(rep(c(1:12), 24*2)))
 
-df_day_1_bis = meter_public[as.Date(meter_public$time) %in% dates, ]
+for (i in 2:ncol(df_meter_public)) {
+  print(i)
+  list_meter_public_characteristic = calculate_characteristic_days(df = df_meter_public[, c(1, i)], number_selected_year = unique(year(selected_year_consumption)))  
+  df_meter_public_characteristic_i = dplyr::bind_rows(list_meter_public_characteristic, .id = "column_label")
+  df_meter_public_characteristic = cbind(df_meter_public_characteristic, df_meter_public_characteristic_i[, 3])
+  colnames(df_meter_public_characteristic)[i] = paste0("cons_",i-1)
+} 
 
-head(meter_public)
-
-# ncol(df_day_1_bis)
-df_day_1_bis = df_day_1_bis[colSums(is.na(df_day_1_bis)) != nrow(df_day_1_bis)]
-# ncol(df_day_1_bis)
-# filter:
-# df_day_1_bis = df_day_1_bis[, c(1, which(as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = min)) - as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = max)) != 0))]
-# ncol(df_day_1_bis)
-df_day_1_bis$time = as.POSIXct(df_day_1_bis$time)
-df_day_1 = df_day_1[colSums(is.na(df_day_1)) != nrow(df_day_1)]
-
-# TODO
-# n_users = 128/2 
-# TODO:
-# cant merge because it is not the same year
-# df_day_1_merged = merge(x = df_day_1, y = df_day_1_bis)
-
-df_day_1_merged = cbind(df_day_1, df_day_1_bis[, 2:ncol(df_day_1_bis)])
-
-colnames(df_day_1_merged) = c("time", "gen_1", paste0("cons_",1:(ncol(df_day_1_merged)-2) ))
-# p = plot_initial(df_day_1_merged)
+# TODO: should give more importance to the week days, what if I multiply by 5 the price for the weekdays and by 2 the price for the weekend days?
 
 ############################# data reading (genome project - office) #############################
 
-meter_office = import_data_genome_project_office()
-
-df_day_1_bis = meter_office[as.Date(meter_office$time) %in% date, ]
-# ncol(df_day_1_bis)
-df_day_1_bis = df_day_1_bis[colSums(is.na(df_day_1_bis)) != nrow(df_day_1_bis)]
-# ncol(df_day_1_bis)
-# filter:
-# df_day_1_bis = df_day_1_bis[, c(1, which(as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = min)) - as.numeric(apply(X = df_day_1_bis, MARGIN = 2, FUN = max)) != 0))]
-# ncol(df_day_1_bis)
-df_day_1_bis$time = as.POSIXct(df_day_1_bis$time)
-df_day_1 = df_day_1[colSums(is.na(df_day_1)) != nrow(df_day_1)]
+df_meter = import_data_genome_project(selected_year_consumption)
 
 # TODO
 n_users = 128 
-# TODO:
-# cant merge because it is not the same year
-# df_day_1_merged2 = merge(x = df_day_1, y = df_day_1_bis[, 1:((n_users + 3) -ncol(df_day_1_merged))])
+# df_day_1_merged = merge(x = df_day_1, y = df_day_1_bis[, 1:((n_users + 3) -ncol(df_day_1))])
 
-df_day_1_merged2 = cbind(df_day_1_merged, df_day_1_bis[, 2:((n_users + 3) -ncol(df_day_1_merged))])
+# cheeting, problems with NAs:
+df_meter_office = df_meter_office[, -c(3, 4, 10, 16, 29)]
 
-colnames(df_day_1_merged2) = c("time", "gen_1", paste0("cons_",1:n_users))
-df_day_1_merged = df_day_1_merged2
-# p = plot_initial(df_day_1_merged)
 
-############################# define characteristic days #############################
+df_meter_office_characteristic = data.frame("time_int"=sort(rep(c(1:12), 24*2)))
 
-# define 14 characteristic days ( 14 = 2 (week and weekend) * 12 (months) )
+for (i in 2:ncol(df_meter_office)) {
+  print(i)
+  list_meter_office_characteristic = calculate_characteristic_days(df = df_meter_office[, c(1, i)], number_selected_year = unique(year(selected_year_consumption)))  
+  df_meter_office_characteristic_i = dplyr::bind_rows(list_meter_office_characteristic, .id = "column_label")
+  df_meter_office_characteristic = cbind(df_meter_office_characteristic, df_meter_office_characteristic_i[, 3])
+  colnames(df_meter_office_characteristic)[i] = paste0("cons_",i-1)
+} 
 
-df_cons = df_day_1_merged[,grep(pattern = "cons", x = colnames(df_day_1_merged))]
-df_cons_sunny = df_cons[df_local_time$sunny,]
+
+
+
 
 ############################# define n_community_max #############################
 

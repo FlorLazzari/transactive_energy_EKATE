@@ -126,7 +126,7 @@ import_data_genome_project <- function(selected_year_consumption){
   # filter columns with nas:
   meter = meter[colSums(is.na(meter)) != nrow(meter)]
   
-  return(meter_office)
+  return(meter)
 }
 
 
@@ -1360,7 +1360,7 @@ plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]
 ############################# AUX - main #############################
 
 
-calculate_n_community_max <- function(generation, df_cons, time = df_month_1$time){
+calculate_n_community_max <- function(generation, consumption){
   
   # minimum self consumption: 0.2?
   
@@ -1386,7 +1386,7 @@ calculate_n_community_max <- function(generation, df_cons, time = df_month_1$tim
   # plot(generation, type = "l")
   # points(peaks)
   
-  n_community_max = 1 + ceiling(1/mean(colMeans(df_cons[max_insolation_hours, ] / generation[max_insolation_hours])))
+  n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
   
   return(n_community_max)
 }
@@ -1419,6 +1419,7 @@ calculate_characteristic_days <- function(df, number_selected_year){
   df_characteristic = list()
   for (m in 1:12) {
     
+    # m = 1
     if (m < 11) {
       days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
     }else{
@@ -1432,31 +1433,41 @@ calculate_characteristic_days <- function(df, number_selected_year){
     
     ##
     
-    df_mean = data.frame("hour" = 0:23, "energy" = 0)
+    df_mean_1 = data.frame("hour" = 0:23, "energy" = 0)
     
     df_month_week = df[as.Date(df$time) %in% days_month_week, ]
-    df_month_clean = df_month_week[!is.na(df_month_week$energy), ]
-    
-    df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
-    colnames(df_mean_incomplete) = c("hour", "energy")
-    
-    df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
-    df_mean_week = df_mean
+    df_month_week_clean = df_month_week[!is.na(df_month_week$energy), ]
     
     ##
     
-    df_mean = data.frame("hour" = 0:23, "energy" = 0)
+    df_mean_2 = data.frame("hour" = 0:23, "energy" = 0)
     
     df_month_end_week = df[as.Date(df$time) %in% days_month_end_week, ]
-    df_month_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
+    df_month_end_week_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
     
-    df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
-    colnames(df_mean_incomplete) = c("hour", "energy")
     
-    df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
-    df_mean_end_week = df_mean
+    if((any(!(0:23 %in% unique(hour(df_month_week_clean$time))))) | (any(!(0:23 %in% unique(hour(df_month_end_week_clean$time)))))){
+
+      df_characteristic[[m]] = NA
     
-    df_characteristic[[m]] = rbind(df_mean_week, df_mean_end_week)
+    }else{
+      
+      df_mean_incomplete = aggregate(df_month_week_clean$energy, by = list(hour(df_month_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_1[df_mean_1$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_week = df_mean_1
+      
+      ##
+      
+      df_mean_incomplete = aggregate(df_month_end_week_clean$energy, by = list(hour(df_month_end_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_2[df_mean_2$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_end_week = df_mean_2
+      
+      df_characteristic[[m]] = rbind(df_mean_week, df_mean_end_week)
+    }
   }
   
   return(df_characteristic)

@@ -130,6 +130,14 @@ individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 # level of hippiesm (weight_surplus)
 # understand and set the parameters of each GA!
 
+# TODO: what is making the algo take too long?
+# increasing the number of users (n_community_max) => increases the amount of pre_optimal_combinations 
+# increasing the number of days => reduces the amount of pre_optimal_combinations 
+
+
+# should check the simmilarities between 
+
+
 tic = Sys.time()
 optimal_combination_using_2_GAs <- optimize_hourly_betas_multi_objective(hourly = T, weight_surplus = 0.5, n_community_max = n_community_max, n_binary_rep = n_binary_rep, df_gen_sunny = df_gen_sunny, df_cons_sunny = df_cons_sunny, global_investment = global_investment, individual_investment = individual_investment)
 toc = Sys.time()

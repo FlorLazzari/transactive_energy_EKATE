@@ -179,7 +179,7 @@ optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_comm
   
   # TODO: trying the hourly
   pre_optimal_combinations <- optimization_1(hourly, n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
-  
+
   # not all of the combinations are of the size = n_community_max (some are smaller)
   
   # TODO: separate the combinations according to the number n_community_per_combination
@@ -426,19 +426,19 @@ calculate_gen_assigned <- function(df_gen, combination){
 # }
 
 
-optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
+optimization_1 <- function(n_community, n_binary_rep, df_gen, df_cons){
   
-  if (hourly == T) {
-    fitness = fitness_1_betas
-  } else{
-    fitness = fitness_1
-  }
+  # if (hourly == T) {
+  #   fitness = fitness_1_betas
+  # } else{
+  #   fitness = fitness_1
+  # }
   
-  optim_results <- ga(type = "binary", fitness = fitness, 
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
                       nBits = n_binary_rep*n_community,
                       n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
                       # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = 200, maxiter = 100, run = 50,
+                      popSize = 600, maxiter = 400, run = 50,
                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
                       keepBest = T,
                       pmutation = 0.3
@@ -1554,14 +1554,18 @@ calculate_gen_assigned_betas <- function(df_gen_day, matrix_coefficients){
 
 
 calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
-  not_selected_cons = (combination == 0) 
-  df_cons[, not_selected_cons] = 0
   
-  df_cons_community = rowSums(df_cons)
+  df_cons_selected = df_cons
+  
+  not_selected_cons = (combination == 0) 
+  df_cons_selected[, not_selected_cons] = 0
+  
+  df_cons_community = as.numeric(rowSums(df_cons_selected))
   
   community_hourly_surplus <- df_gen - df_cons_community
   community_hourly_surplus[community_hourly_surplus < 0] = 0
   
+    
   return(community_hourly_surplus)
 }
 

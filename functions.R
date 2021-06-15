@@ -434,19 +434,24 @@ optimization_1 <- function(n_community, n_binary_rep, df_gen, df_cons){
   #   fitness = fitness_1
   # }
   
+  dim_search_ga = ncol(combn(ncol(df_cons), n_community))*factorial(n_community)
+  dim_search_solution = ncol(combn(ncol(df_cons), n_community))
+  
+  # dim_search_ga = 600
+  
   optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
                       nBits = n_binary_rep*n_community,
                       n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
                       # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = 600, maxiter = 400, run = 50,
+                      popSize = dim_search_ga, maxiter = 400, run = 50,
                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
                       keepBest = T,
                       pmutation = 0.3
                       )
+  
   # TODO: understand: popSize should be simmilar to the combinatorial??
   # look for: relation between popSize and dimension of the space (number of possible combinations) 
   # TODO: work a better crossover, now is being done a uCrossover in "pieces"
-  
   # TODO: check how are the bestSolutions find
   x_solution = optim_results@bestSol
   
@@ -454,10 +459,27 @@ optimization_1 <- function(n_community, n_binary_rep, df_gen, df_cons){
   n_solutions = length(x_solution)/(n_binary_rep * n_community)
   factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
   solutions = t(as.data.frame(split(x = x_solution, f = factor)))
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons))
   
-  solutions = solutions[!duplicated(solutions), ]
-  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep))
+  # combinations are repeated in the cases, for example: 
+  # combinations = ( 3 -- 2 -- 1) or (1 -- 2 -- 3)
+  # combinations = ( 3 -- 3 -- 1) or (1 -- 1 -- 3)
+  # the difference is due to the repetition:
+  # combinatorics counting as different elements to the repeted elements: n! / (n-p)!               CASE1: the search space of the GA 
+  # combinatorics without counting as different elements to the repeted elements: n! / p! (n-p)!    CASE2: the useful solutions for us 
+  # if p! is big => the differences between combinations_complete and combinations will tend to be bigger 
+
+  # the important number is: how many are we loosing by implementig the algo in this way??
+  combinations_complete = combinations
+  combinations = combinations[!duplicated(combinations), ]
+
+  print((nrow(combinations_complete) - nrow(combinations))/nrow(combinations_complete))
+
+  surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons))
+  surplus_ordered = surplus[order(surplus)][1:round(0.1*dim_search_solution)]
   
+  combinations_ordered = combinations[order(surplus), ][1:round(0.1*dim_search_solution),]
+
   return(combinations)
 }
 
@@ -505,7 +527,7 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   # x = rep(0, n_binary_rep*n_community)
   # x = rep(1, n_binary_rep*n_community)
   
-  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep)
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons)
   
   surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen, df_cons = df_cons))
   score <- surplus
@@ -1477,7 +1499,7 @@ calculate_characteristic_days <- function(df, number_selected_year){
 ############################# AUX - operative #############################
 
 
-calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep){
+calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep,  df_cons){
   
   combination = rep(0, ncol(df_cons))
   

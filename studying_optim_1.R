@@ -11,7 +11,6 @@ library(purrr)
 library(nsga2R)
 source("functions.R")
 
-
 ############################# select year periods #############################
 
 selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")
@@ -112,7 +111,6 @@ n_community_max = calculate_n_community_max(generation = df_gen$energy, consumpt
 
 global_investment = max(df_gen$energy, na.rm = T)*1100
 
-
 ############################# run algo #############################
 
 # TODO: what is making the algo take too long?
@@ -123,22 +121,22 @@ df_cons_sunny = df_cons_sunny[,1:8]
 n_binary_rep = log(ncol(df_cons_sunny), base=2)
 
 combinations = list()
-for (i in 1:5) {
+
+for (i in 1:3) {
   pre_optimal_combinations <- optimization_1(n_community = n_community_max, 
                                              n_binary_rep = n_binary_rep, 
                                              df_gen = df_gen_sunny, 
                                              df_cons = df_cons_sunny)
   
   combinations[[i]] = as.data.frame(pre_optimal_combinations)
-  print(nrow(pre_optimal_combinations))
 }
 
 
-# hola <- function(x){
-#   sums = colSums(x)
-#   normalized_sums = sums/nrow(x)
-#   return(normalized_sums)
-# }  
+hola <- function(x){
+  sums = colSums(x)
+  normalized_sums = sums/nrow(x)
+  return(normalized_sums)
+}
 
 combinations_comparison = lapply(X = combinations, FUN = hola)
 
@@ -156,21 +154,6 @@ combinations_comparison_plot$variable = factor(combinations_comparison_plot$vari
 p <- ggplot() +
   geom_bar(aes(x = combinations_comparison_plot$user,  y = combinations_comparison_plot$value, fill = combinations_comparison_plot$variable), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
 
-
-c = lapply(X = combinations, FUN = hola_4)
-
-length(c[[1]])
-length(unique(c[[1]]))
-
-c[[1]] %in% unique(c[[1]])[1]
-
-# this shows evidence that a lot of combinations are being repeated
-# TODO: study the way in which we are selecting the combinations
-c[[1]][1]
-c[[1]][21]
-combinations[[1]][1, ]
-combinations[[1]][21, ]
-
 hola_4 <- function(x){
   
   y = c(0) 
@@ -186,7 +169,18 @@ hola_4 <- function(x){
   return(result)
 }
 
-hola_4(combinations[[1]])
-nrow(combinations[[1]])
+c = lapply(X = combinations, FUN = hola_4)
+
+length(c[[1]])
+length(unique(c[[1]]))
+
+c[[1]] %in% unique(c[[1]])[5]
+
+# this shows evidence that a lot of combinations are being repeated
+# TODO: study the way in which we are selecting the combinations
+c[[1]][5]
+c[[1]][11]
+combinations[[1]][5, ]
+combinations[[1]][11, ]
 
 # conclusion: the combinations are repeating!

@@ -115,9 +115,9 @@ global_investment = max(df_gen$energy, na.rm = T)*1100
 
 # TODO: what is making the algo take too long?
 
-n_community_max = 3
+# n_community_max = 3
 
-df_cons_sunny = df_cons_sunny[,1:8]
+# df_cons_sunny = df_cons_sunny[,1:8]
 n_binary_rep = log(ncol(df_cons_sunny), base=2)
 
 combinations = list()
@@ -131,56 +131,80 @@ for (i in 1:3) {
   combinations[[i]] = as.data.frame(pre_optimal_combinations)
 }
 
-
-hola <- function(x){
-  sums = colSums(x)
-  normalized_sums = sums/nrow(x)
-  return(normalized_sums)
-}
-
-combinations_comparison = lapply(X = combinations, FUN = hola)
+# surplus = colSums(apply(X = as.matrix(combinations[[1]]), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny))  
+# hist(surplus)
+# surplus_2 = colSums(apply(X = as.matrix(combinations[[2]]), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny))  
+# hist(surplus_2)
+# surplus_3 = colSums(apply(X = as.matrix(combinations[[3]]), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny))  
+# hist(surplus_3)
 
 
 
-combinations_comparison = as.data.frame(combinations_comparison)
-colnames(combinations_comparison) = c(1:ncol(combinations_comparison))
-combinations_comparison$user = 1:nrow(combinations_comparison)
+# hola <- function(x){
+#   sums = colSums(x)
+#   normalized_sums = sums/nrow(x)
+#   return(normalized_sums)
+# }
+# 
+# combinations_comparison = lapply(X = combinations, FUN = hola)
+# 
+# combinations_comparison = as.data.frame(combinations_comparison)
+# colnames(combinations_comparison) = c(1:ncol(combinations_comparison))
+# combinations_comparison$user = 1:nrow(combinations_comparison)
+# 
+# combinations_comparison_plot = melt(data = combinations_comparison, id.vars = "user")
+# 
+# combinations_comparison_plot$user = factor(combinations_comparison_plot$user)
+# combinations_comparison_plot$variable = factor(combinations_comparison_plot$variable)
+# 
+# p <- ggplot() +
+#   geom_bar(aes(x = combinations_comparison_plot$user,  y = combinations_comparison_plot$value, fill = combinations_comparison_plot$variable), alpha = 0.5, width = 1, stat = "identity", position=position_dodge())
+ 
+# # this only works if the number of users is 8:
+# hola_4 <- function(x){
+#   
+#   y = c(0) 
+#   
+#   for (i in 1:7) {
+#     y_i = 10^(-i)
+#     y = c(y, y_i)
+#   }
+#   
+#   y = as.data.frame(y)
+#   
+#   result = as.matrix(x)%*%as.matrix(y)
+#   return(result)
+# }
+# 
+# c = lapply(X = combinations, FUN = hola_4)
+# 
+# length(c[[1]])
+# length(unique(c[[1]]))
+# 
+# c[[1]] %in% unique(c[[1]])[5]
+# 
+# # this shows evidence that a lot of combinations are being repeated
+# # TODO: study the way in which we are selecting the combinations
+# c[[1]][5]
+# c[[1]][11]
+# combinations[[1]][5, ]
+# combinations[[1]][11, ]
 
-combinations_comparison_plot = melt(data = combinations_comparison, id.vars = "user") 
+individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
 
-combinations_comparison_plot$user = factor(combinations_comparison_plot$user)
-combinations_comparison_plot$variable = factor(combinations_comparison_plot$variable)
+optimal_combination_using_2_GAs <- optimize_hourly_betas_multi_objective(hourly = T, weight_surplus = 0.5, n_community_max = n_community_max, n_binary_rep = n_binary_rep, df_gen_sunny = df_gen_sunny, df_cons_sunny = df_cons_sunny, global_investment = global_investment, individual_investment = individual_investment)
 
-p <- ggplot() +
-  geom_bar(aes(x = combinations_comparison_plot$user,  y = combinations_comparison_plot$value, fill = combinations_comparison_plot$variable), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
 
-hola_4 <- function(x){
-  
-  y = c(0) 
-  
-  for (i in 1:7) {
-    y_i = 10^(-i)
-    y = c(y, y_i)
-  }
-  
-  y = as.data.frame(y)
-  
-  result = as.matrix(x)%*%as.matrix(y)
-  return(result)
-}
 
-c = lapply(X = combinations, FUN = hola_4)
+# 128 users, n_community = 14
+# optimization_1 = 1.79 mins
+# optimize_hourly_betas_multi_objective_per_combination = 10.39 mins PER COMBINATION! with 50 combinations => ~ 50 min
+# 128 users, n_community_max = 8
+# optimization_1 =  2.91 mins
+# optimize_hourly_betas_multi_objective_per_combination = (for 50 combinations) => ~ 0.0014 min
 
-length(c[[1]])
-length(unique(c[[1]]))
+# possibly wrong because entered in if and FALSE
+# 128 users, n_community_max = 3
+# optimization_1 =  mins
+# optimize_hourly_betas_multi_objective_per_combination = 2.908707e-05 secs PER COMBINATION! with 50 combinations => ~ 0.0014 min
 
-c[[1]] %in% unique(c[[1]])[5]
-
-# this shows evidence that a lot of combinations are being repeated
-# TODO: study the way in which we are selecting the combinations
-c[[1]][5]
-c[[1]][11]
-combinations[[1]][5, ]
-combinations[[1]][11, ]
-
-# conclusion: the combinations are repeating!

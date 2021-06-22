@@ -205,6 +205,7 @@ optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_comm
   # new_optimum_coefficients = pre_optimum_coefficients
   new_surplus = c()
   new_optimum_coefficients = list()
+  
   new_payback = df_cons_sunny[0,1:ncol(df_cons_sunny)]
 
   # pre_payback = pre_optimum_coefficients
@@ -229,7 +230,7 @@ optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_comm
       combination_optimum[combination_optimum!=0] = coefficients_criteria
       
       new_optimum_coefficients[[j]] = coefficients_criteria
-      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected_sunny, df_gen_sunny, individual_investment_max, matrix_coefficients = coefficients_criteria)
+      new_payback[j, combination_selected!=0] = calculate_payback_betas_daily(df_cons_selected_sunny, df_gen_sunny, individual_investment_max, matrix_coefficients = coefficients_criteria)
       surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny, df_cons_selected_sunny))
       new_surplus <- c(new_surplus, surplus)
       
@@ -285,6 +286,7 @@ optimize_hourly_betas <- function(hourly, weight_surplus, n_community_max, n_bin
   # hist(as.numeric(lapply(X = surplus, FUN = sum)))
   # sum(df_gen)
   
+  ##### TODO PAYBACK
   # new_optimum_coefficients = pre_optimum_coefficients
   new_surplus = c()
   new_optimum_coefficients = list()
@@ -675,6 +677,7 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
   
+  ##### TODO PAYBACK
   payback_years = individual_investment_selected / profit_one_year 
   
   # TODO:
@@ -743,9 +746,12 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, individual_inves
   
   cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
+  # assuming period is a DAY
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
   
+  
+  ##### TODO PAYBACK
   payback_years = individual_investment_selected / profit_one_year 
   
   # TODO:
@@ -1567,9 +1573,9 @@ plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star
   p = ggplot() +
     geom_point(aes(x = df_pareto_objectives$surplus, y = df_pareto_objectives$payback)) +
     geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) +
-    geom_line(aes(x = x_lineal, y = y_lineal)) +
-    geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) +
-    geom_point(aes(x = x_circular, y = y_circular))
+    # geom_line(aes(x = x_lineal, y = y_lineal)) +
+    geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
+    # geom_point(aes(x = x_circular, y = y_circular))
   # ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
 
   return(p)
@@ -1824,6 +1830,38 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
   surplus_x <- df_gen_assigned - df_cons_selected_day
   surplus_x[surplus_x < 0] = 0
 
+  purchase_price = 0.14859
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price*df_cons_selected_day)
+  
+  grid_x = df_cons_selected_day - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+  
+  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  
+  profit_period = cost_old - cost_sun
+  ##### TODO PAYBACK: this 360 should change
+  profit_one_year = profit_period * 360 
+
+  payback_years = individual_investment / profit_one_year 
+  
+  # TODO: 
+  payback_years[is.na(payback_years)] = 1000 
+  
+  return(payback_years)
+}
+
+
+calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_day
+  surplus_x[surplus_x < 0] = 0
+  
   purchase_price = 0.14859
   sale_price = 0.0508
   

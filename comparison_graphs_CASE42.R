@@ -90,7 +90,7 @@ comparison = data.frame("i_matrix" = factor(1:4),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/presentation_barna/comparison_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
 
 # GLOBAL PAYBACK
 
@@ -118,7 +118,7 @@ comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_payback_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/presentation_barna/comparison_payback_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
 value_vector = as.numeric(individual_investment_selected)
@@ -127,7 +127,7 @@ comparison = data.frame("user" = factor(1:ncol(df_cons_selected)),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_investment_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/presentation_barna/comparison_investment_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
 
 
 

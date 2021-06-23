@@ -122,6 +122,6 @@ comparison = data.frame("i_matrix" = factor(1:4),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_CASE2"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/presentation_barna/comparison_CASE2"), plot = p, device = "pdf", width = 8, height = 3)
 
 

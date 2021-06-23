@@ -21,7 +21,7 @@ individual_investment_selected = calculate_individual_investment(combination_sel
 # to check surplus
 n_sunny_hours_start = 1
 # for (month_i in 1:12) {
-for (month_i in 1:6) {
+for (month_i in 1:12) {
   for (date_i in 1:2) {
 
     # month_i = 7

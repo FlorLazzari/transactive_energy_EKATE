@@ -17,6 +17,14 @@ matrix_coefficients_1[,] = 1/n_community
 
 ############################# OPTIMIZER 2: repartition based on investment #############################
 
+# IMPORTANT
+# when the investment is proportional to the consumption => there is almost no difference in the payback of pre_surplus (first optimization) and optimization_betas (second optimization)
+# TODO: a good scenario would be to define a very different investment compared to the consumption
+
+# compare these 2 cases:
+individual_investment_selected_original = individual_investment_selected
+individual_investment_selected = sample(individual_investment_selected)
+
 ratio_investment = as.numeric(individual_investment_selected/sum(individual_investment_selected))
 matrix_coefficients_2 = matrix(1, nrow = n_sunny_hours) %*% matrix(ratio_investment, ncol = n_community)
 
@@ -60,54 +68,39 @@ matrix_coefficients_4 = selection_according_to_criteria_2(optim, n_community, n_
 # plot_matrix(name = "4", matrix_coefficients_4)
 
 # INDIVIDUAL PAYBACK
-value_vector = c()
-
-
-comparison_1 = data.frame("user" = factor(1:length(value_vector)), 
+comparison_1 = data.frame("user" = factor(1:ncol(df_cons_selected)), 
                           "i_matrix" = factor(1), 
                           "value" = as.numeric(calculate_payback_betas_daily(df_cons_selected_sunny_one_day, df_gen_sunny_one_day, individual_investment_selected, matrix_coefficients_1)))
 
-comparison_2 = data.frame("user" = factor(1:length(value_vector)), 
+comparison_2 = data.frame("user" = factor(1:ncol(df_cons_selected)), 
                           "i_matrix" = factor(2), 
                           "value" = as.numeric(calculate_payback_betas_daily(df_cons_selected_sunny_one_day, df_gen_sunny_one_day, individual_investment_selected, matrix_coefficients_2)))
 
-comparison_3 = data.frame("user" = factor(1:length(value_vector)), 
+comparison_3 = data.frame("user" = factor(1:ncol(df_cons_selected)), 
                           "i_matrix" = factor(3), 
                           "value" = as.numeric(calculate_payback_betas_daily(df_cons_selected_sunny_one_day, df_gen_sunny_one_day, individual_investment_selected, matrix_coefficients_3)))
 
-comparison_4 = data.frame("user" = factor(1:length(value_vector)), 
+comparison_4 = data.frame("user" = factor(1:ncol(df_cons_selected)), 
                           "i_matrix" = factor(4), 
                           "value" = as.numeric(calculate_payback_betas_daily(df_cons_selected_sunny_one_day, df_gen_sunny_one_day, individual_investment_selected, matrix_coefficients_4)))
 
 comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 
-p <- ggplot() +
-  geom_bar(aes(x = comparison$user,  y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
+# p <- ggplot() +
+#   geom_bar(aes(x = comparison$user,  y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+# ggsave(filename = paste0("graphs/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
-
-
-# p <- ggplot() +
-#   geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-# ggsave(filename = paste0("graphs/comparison_payback_CASE32"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/comparison_payback_CASE32"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
 value_vector = as.numeric(individual_investment_selected)
-
-comparison = data.frame("user" = factor(1:length(value_vector)), 
+comparison = data.frame("user" = factor(1:ncol(df_cons_selected)), 
                         "value" = value_vector)
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
 ggsave(filename = paste0("graphs/comparison_investment_CASE32"), plot = p, device = "pdf", width = 8, height = 3)
-
-
-
-
-
 
 

@@ -1,5 +1,5 @@
-## CASE 3: community objective = MINIMUM INDIVIDUAL PAYBACK (dont care about global surplus)
-# 3.1) investors: residential houses => all users invest the same
+## CASE 4: community objective = MINIMUM INDIVIDUAL PAYBACK (dont care about global surplus)
+# 4.1) investors: residential houses => all users invest the same
 
 individual_investment_selected[] = sum(individual_investment_selected)/length(individual_investment_selected)
 
@@ -24,15 +24,6 @@ matrix_coefficients_2 = matrix(1, nrow = n_sunny_hours) %*% matrix(ratio_investm
 
 ############################# OPTIMIZER 4: optimum repartition taking into account the payback #############################
 
-# trying:
-df_cons_selected_sunny_original = df_cons_selected_sunny 
-df_gen_sunny_original = df_gen_sunny
-
-# df_cons_selected_sunny = df_cons_selected_sunny_original
-# df_gen_sunny = df_gen_sunny_original
-
-# coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(hourly, combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max)
-
 # optimize_hourly_betas_multi_objective_per_combination:
 dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
 # optim <- nsga2R_flor(fn = purrr::partial(fitness_MO,
@@ -50,17 +41,17 @@ dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
 #                      upperBounds = rep(1, dim))
 
 # criteria 1 = min payback
-matrix_coefficients_4 = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 1)
+matrix_coefficients_4 = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2)
 
 ############################# generate plot #############################
 
-# CASE 3.1) GRAPHS showing: INDIVIDUAL PAYBACK - INDIVIDUAL INVESTMENT
+# CASE 4.1) GRAPHS showing: INDIVIDUAL PAYBACK - INDIVIDUAL INVESTMENT
 
 # checking:
-# plot_matrix(name = "1", matrix_coefficients_1)
-# plot_matrix(name = "2", matrix_coefficients_2)
-# plot_matrix(name = "3", matrix_coefficients_3)
-# plot_matrix(name = "4", matrix_coefficients_4)
+plot_matrix(name = "1", matrix_coefficients_1)
+plot_matrix(name = "2", matrix_coefficients_2)
+plot_matrix(name = "3", matrix_coefficients_3)
+plot_matrix(name = "4", matrix_coefficients_4)
 
 # INDIVIDUAL PAYBACK
 comparison_1 = data.frame("user" = factor(1:ncol(df_cons_selected)), 
@@ -87,7 +78,7 @@ comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_payback_CASE31"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/comparison_payback_CASE41"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
 value_vector = as.numeric(individual_investment_selected)
@@ -96,4 +87,5 @@ comparison = data.frame("user" = factor(1:ncol(df_cons_selected)),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/comparison_investment_CASE31"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/comparison_investment_CASE41"), plot = p, device = "pdf", width = 8, height = 3)
+

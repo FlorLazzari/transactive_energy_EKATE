@@ -10,7 +10,6 @@ library(purrr)
 library(nsga2R)
 source("functions.R")
 
-
 ############################# select year periods #############################
 
 selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")

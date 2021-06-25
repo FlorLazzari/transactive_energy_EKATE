@@ -1,54 +1,9 @@
 ## CASE 2: community objective = REDUCE GLOBAL SURPLUS 
 
-# import from main_many_users:
-pre_optimal_combinations
-
-hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
-pre_surplus = colSums(hourly_surplus)
-
-############################# select a combination #############################
-
-combination_selected = pre_optimal_combinations[1, ]
-
-df_cons_selected_sunny = df_cons_sunny[,combination_selected==1]
-df_cons_selected = df_cons[,combination_selected==1]
-
-individual_investment_max = individual_investment[combination_selected==1]  
-
-# df = data.frame("time" = df_local_time$time[df_local_time$sunny],
-#                 "gen" = df_gen_sunny)
-# df = cbind(df_gen, df_cons_selected, "time" = df_local_time$time)
-# plot_initial(df)
-
-individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
-
-############################# select first day #############################
-
-# to check surplus
-n_sunny_hours_start = 1
-# for (month_i in 1:12) {
-for (month_i in 1:5) {
-  # for (date_i in 1:2) {
-  for (date_i in 1:1) {
-
-    df_local_time_first_day = df_local_time[df_local_time$month %in% month_i & df_local_time$date %in% date_i, ] 
-    n_sunny_hours = sum(df_local_time_first_day$sunny)
-    
-    df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
-    df_cons_sunny_one_day = df_cons_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
-    df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
-    
-    # checking 
-    print(sum(calculate_surplus_hourly_community(combination = combination_selected, df_gen = df_gen_sunny_one_day, df_cons = df_cons_sunny_one_day)))
-    n_sunny_hours_start = n_sunny_hours_start + n_sunny_hours 
-  }
-}
-
-n_community = ncol(df_cons_selected_sunny)  
-
-hourly_surplus = calculate_surplus_hourly_community(combination = combination_selected, df_gen = df_gen_sunny_one_day, df_cons = df_cons_sunny_one_day)
-pre_surplus = sum(hourly_surplus)
-
+# import from select_combination:
+df_cons_selected_sunny_one_day 
+df_cons_sunny_one_day
+df_gen_sunny_one_day
 
 ############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
 
@@ -121,7 +76,8 @@ comparison = data.frame("i_matrix" = factor(1:4),
                         )
 
 p <- ggplot() +
-  geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+  labs(x = "Method", y = "PV global surplus [kWh]", fill = "")  
 ggsave(filename = paste0("graphs/presentation_barna/comparison_CASE2"), plot = p, device = "pdf", width = 8, height = 3)
 
 

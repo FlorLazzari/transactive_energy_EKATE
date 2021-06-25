@@ -1,7 +1,8 @@
 ## CASE 4: community objective = MINIMUM INDIVIDUAL PAYBACK (dont care about global surplus)
 # 4.2) investors: residential houses => some users invest more than others
 
-individual_investment_selected = individual_investment_selected_original
+individual_investment_max = individual_investment[combination_selected==1]  
+individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
 individual_investment_selected = sample(individual_investment_selected)
 
 ############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
@@ -61,11 +62,11 @@ plot_matrix(name = "4", matrix_coefficients_4)
 rows_one_day = (df_local_time$month == 7 & df_local_time$date == 1)
 
 df_local_time_one_day = df_local_time[rows_one_day,]
-df_gen_one_day = df_gen[rows_day,"energy"]
-df_cons_selected_one_day = df_cons_selected[rows_day,]
+df_gen_one_day = df_gen[rows_one_day,"energy"]
+df_cons_selected_one_day = df_cons_selected[rows_one_day,]
 
 df_gen_assigned_one_day = calculate_gen_assigned_betas(df_gen_day = df_gen_sunny_one_day, matrix_coefficients = matrix_coefficients_1)
-plot_disaggregated_daily_mean_community_betas(name = paste0("solar_assignation_",), df_gen_assigned_one_day, df_cons_selected_one_day, df_local_time_one_day)
+plot_disaggregated_daily_mean_community_betas(name = paste0("solar_assignation_",), df_gen_assigned = df_gen_assigned_one_day, df_cons_selected_users = df_cons_selected_one_day, df_local_time = df_local_time_one_day)
 
 df_gen_assigned_one_day = calculate_gen_assigned_betas(df_gen_day = df_gen_sunny_one_day, matrix_coefficients = matrix_coefficients_2)
 plot_disaggregated_daily_mean_community_betas(name = "hola", df_gen_assigned_one_day, df_cons_selected_one_day, df_local_time_one_day)

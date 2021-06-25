@@ -116,17 +116,26 @@ import_data_genome_project <- function(selected_year_consumption){
   hourly_mean = colMeans(meter[2:ncol(meter)], na.rm = T)
   
   meter = meter[, c(1,order(hourly_mean)+1)]
-  meter = meter[, c(1:as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 25)[1]))]
+  
+  # filter columns with nas:
+  meter = meter[colSums(is.na(meter)) != nrow(meter)]
+  
+  # meter = meter[, c(1:as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 300)[1]))]
+  last = as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 25))
+  meter = meter[, c(1:last[1])]
+  first = as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) < 2))
+  # meter = meter[, c(1,first[length(first)]:ncol(meter))]
+  
+  # checking:
+  # colMeans(meter[, 2:ncol(meter)], na.rm = T)
+  # ncol(meter)
   
   meter$time = as.POSIXct(meter$time)
   
   # plot(meter_public[, 2])
   
   meter = meter[as.Date(meter$time) %in% as.Date(selected_year_consumption), ]
-  
-  # filter columns with nas:
-  meter = meter[colSums(is.na(meter)) != nrow(meter)]
-  
+
   return(meter)
 }
 
@@ -942,7 +951,7 @@ plot_disaggregated_daily_mean_community_betas <- function(name, df_gen_assigned,
   
   
   # calculate solar consumption and surplus
-  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
   
   solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
   solar_surplus[solar_surplus < 0] = 0

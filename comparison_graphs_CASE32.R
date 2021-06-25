@@ -1,6 +1,9 @@
 ## CASE 3: community objective = MINIMUM INDIVIDUAL PAYBACK (dont care about global surplus)
 # 3.2) investors: residential houses => some users invest more than others
 
+individual_investment_max = individual_investment[combination_selected==1]  
+individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+
 ############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
 
 matrix_coefficients_3 = calculate_matrix_coefficients(df_gen_sunny_one_day, df_cons_selected_sunny_one_day)
@@ -91,7 +94,8 @@ comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 # ggsave(filename = paste0("graphs/presentation_barna/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
 
 p <- ggplot() +
-  geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+  labs(x = "Method", y = "Payback [years]", fill = "Users")  
 ggsave(filename = paste0("graphs/presentation_barna/comparison_payback_CASE32"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
@@ -100,7 +104,8 @@ comparison = data.frame("user" = factor(1:ncol(df_cons_selected)),
                         "value" = value_vector)
 
 p <- ggplot() +
-  geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+  labs(x = "Method", y = "Investment [euros]")   
 ggsave(filename = paste0("graphs/presentation_barna/comparison_investment_CASE32"), plot = p, device = "pdf", width = 8, height = 3)
 
 

@@ -24,21 +24,19 @@ colnames(df_gen) = c("time", "gen_1")
 df_gen$gen_1[df_gen$gen_1 == 0] = NA
 df_gen = eliminate_outliers(df_gen)
 
-p = plot_initial(df_gen)
+# p = plot_initial(name = "test_initial_0", df_gen)
 
 df_gen = df_gen[as.Date(df_gen$time) %in% as.Date(selected_year_generation), ]
 
 df_local_time_gen = data.frame("time" = selected_year_generation, 
                                "month" = month(selected_year_generation),
-                               "date" = as.Date(selected_year_generation), 
+                               "date" = as.Date(selected_year_generation, tz = "CET"), 
                                "hour" = hour(selected_year_generation))
+# df_local_time_gen = df_local_time_gen[-7155,]
 
 # problem here:
 # df_local_time_gen$time[df_local_time_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST")]
 # df_gen$time[df_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST")]
-
-# df_gen[7150:7160,]
-# df_gen_2[7150:7160,]
 
 # will remove the second value 
 
@@ -46,11 +44,14 @@ df_gen = merge(x = data.frame("time" = df_local_time_gen[, "time"]), y = df_gen,
 
 to_remove = which(df_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST"))
 df_gen = df_gen[-to_remove, ]
-p = plot_initial(df_gen)
+
+to_remove = which(df_local_time_gen$time %in% as.POSIXct("2020-10-25 02:00:00 CEST"))
+df_local_time_gen = df_local_time_gen[-to_remove, ]
+# p = plot_initial(name = "test_initial_1", df_gen)
 
 df_local_time_gen$sunny = (df_gen$gen_1 != 0 & !is.na(df_gen$gen_1))
 df_gen_sunny = df_gen[df_local_time_gen$sunny,]
-p = plot_initial(df_gen)
+# p = plot_initial(name = "test_initial_2", df_gen)
 
 # TODO: this could be altering the results:
 df_gen[is.na(df_gen$gen_1),"gen_1"] = 0

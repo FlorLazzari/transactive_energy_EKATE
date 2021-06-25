@@ -40,7 +40,7 @@ dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
 #                      lowerBounds = rep(0, dim),
 #                      upperBounds = rep(1, dim))
 
-# criteria 1 = min payback
+# criteria 2 = reasonable surplus & payback
 matrix_coefficients_4 = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2)
 
 ############################# generate plot #############################
@@ -77,7 +77,8 @@ comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 # ggsave(filename = paste0("graphs/presentation_barna/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
 
 p <- ggplot() +
-  geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+  labs(x = "Method", y = "Payback [years]", fill = "Users")
 ggsave(filename = paste0("graphs/presentation_barna/comparison_payback_CASE41"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
@@ -86,6 +87,7 @@ comparison = data.frame("user" = factor(1:ncol(df_cons_selected)),
                         "value" = value_vector)
 
 p <- ggplot() +
-  geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
+  geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+  labs(x = "Method", y = "Investment [euros]")    
 ggsave(filename = paste0("graphs/presentation_barna/comparison_investment_CASE41"), plot = p, device = "pdf", width = 8, height = 3)
 

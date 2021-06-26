@@ -40,6 +40,7 @@ source("functions.R")
 # which(pre_surplus<5 & pre_surplus>4)
 
 i = 7083
+i = 7000
 
 combination_selected = pre_optimal_combinations[i, ]
 df_cons_selected = df_cons_sunny[,combination_selected==1]

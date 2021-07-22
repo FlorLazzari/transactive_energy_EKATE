@@ -25,7 +25,7 @@ pre_surplus = sum(hourly_surplus)
 # to check surplus
 n_sunny_hours_start = 1
 # for (month_i in 1:12) {
-for (month_i in 1:4) {
+for (month_i in 1:3) {
   for (date_i in 1:2) {
 
     # month_i = 7
@@ -54,3 +54,33 @@ pre_surplus = sum(hourly_surplus)
 
 # TODO TODO TODO
 # generate fake data to show graph!
+
+typical_pattern_1 = c(0.6, 0.5,0.4, 0.2, 0.2, 0.2, 0.4, 0.4, 0.35, 0.4, 0.4, 0.45, 0.4, 0.5, 0.55, 0.6, 0.55, 0.55, 0.5, 0.6, 0.75, 0.8, 0.75, 0.7) * 10
+typical_pattern_2 = c(0.6, 0.5,0.4, 0.2, 0.2, 0.2, 0.4, 0.4, 0.45, 0.55, 0.4, 0.35, 0.4, 0.5, 0.55, 0.6, 0.55, 0.55, 0.5, 0.6, 0.75, 0.8, 0.75, 0.7) * 10 
+typical_pattern_3 = c(0.6, 0.5,0.4, 0.2, 0.2, 0.2, 0.4, 0.4, 0.45, 0.5, 0.6, 0.75, 0.8, 0.75, 0.7, 0.6, 0.55, 0.55,0.55, 0.4, 0.35, 0.4, 0.5, 0.55) * 10
+
+
+df_cons_selected_sunny_one_day[, 1] = typical_pattern_1[6:(6+nrow(df_cons_selected_sunny_one_day)-1)]
+df_cons_selected_sunny_one_day[, 2] = typical_pattern_2[6:(6+nrow(df_cons_selected_sunny_one_day)-1)]
+df_cons_selected_sunny_one_day[, 3] = typical_pattern_3[6:(6+nrow(df_cons_selected_sunny_one_day)-1)]
+
+which.max(df_gen_sunny_one_day)
+max(df_gen_sunny_one_day)
+sum(df_cons_selected_sunny_one_day[which.max(df_gen_sunny_one_day),])
+
+# df_cons_selected_sunny_one_day[which.max(df_gen_sunny_one_day),4:11] = df_cons_selected_sunny_one_day[which.max(df_gen_sunny_one_day),4:11]*0.5
+# df_cons_selected_sunny_one_day[,4:11] = df_cons_selected_sunny_one_day[,4:11]*0.5
+# 
+# df_gen_sunny_one_day = df_gen_sunny_one_day_original
+# df_gen_sunny_one_day_original = df_gen_sunny_one_day
+
+# df_gen_sunny_one_day = df_gen_sunny_one_day*0.9
+
+df_cons_sunny_one_day[, combination_selected == 1] = df_cons_selected_sunny_one_day
+
+hourly_surplus = calculate_surplus_hourly_community(combination = combination_selected, df_gen = df_gen_sunny_one_day, df_cons = df_cons_sunny_one_day)
+pre_surplus = sum(hourly_surplus)
+
+
+df = cbind(df_gen_sunny_one_day*0.2, df_cons_selected_sunny_one_day, "time" = 1:length(df_gen_sunny_one_day))
+plot_initial(name = paste0(month_i,"_",date_i), df)

@@ -104,9 +104,8 @@ import_data_inergy <- function(filename_1){
 
 import_data_genome_project <- function(selected_year_consumption){
   
-  # filename = "~/Home/Nextcloud/Flor/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-
-  filename = "/home/florencia/Nextcloud/Flor/proyects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
+  filename = "data/electricity_cleaned.csv"
+  # filename = "/home/florencia/Nextcloud/Flor/proyects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
   meter = read.csv(file = filename, header = TRUE)
   meter = meter[, c(1, grep(pattern = "public|office|education", x = colnames(meter)))]
   
@@ -744,17 +743,24 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, individual_inves
   # TODO:
   f1_surplus = sum(surplus_x)
   
-  purchase_price = 0.14859
+  # changed this:
+  # purchase_price = 0.14859
+  purchase_price = c(0.14859, 0.14859, 0.14859, 
+                     0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+                     0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+                     0.14859*1.5) 
   sale_price = 0.0508
   
   cost_old = colSums(purchase_price*df_cons_selected_sunny)
-  
+
   grid_x = df_cons_selected_sunny - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
-  
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+
+  # changed this: 
+  # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  cost_sun = colSums(purchase_price*grid_x) - sale_price * surplus_x_to_sell
   
   # assuming period is a DAY
   profit_period = cost_old - cost_sun
@@ -811,7 +817,8 @@ convergence_speed <- function(n_community_max, n_binary_rep, df_gen, df_cons, gl
 plot_initial <- function(name, df){
   
   df_plot <- df 
-  colnames(df)[2] <- "PV_generation" 
+  colnames(df_plot)[1] <- "PV_generation" 
+  colnames(df_plot)[2:(ncol(df)-1)] = 1:(ncol(df)-2)
   
   df_plot <- melt(data = df_plot, id.vars = "time", variable.name = "series")
   # df_sum <- data.frame("time" = df$time,
@@ -1095,6 +1102,37 @@ plot_disaggregated_daily_mean_community_betas <- function(name, df_gen_assigned,
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
       geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 10){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 11){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]] + df_cons_selected_mean[,1+index_order[11]])) +
       geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
       # grids() + 
       labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
@@ -1610,7 +1648,7 @@ plot_comparison_coefficients_final <- function(df_gen, df_gen_sunny, df_cons_sel
 
 
 # plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star, x_lineal, y_lineal, objectives_with_criteria){
-plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star, objectives_with_criteria){
+plot_multi_objective_criteria_selection <- function(name, df_pareto_objectives, z_star, objectives_with_criteria){
   
   r = (sum(c(objectives_with_criteria$surplus, objectives_with_criteria$payback) - z_star)**2)**0.5  
   
@@ -1624,13 +1662,13 @@ plot_multi_objective_criteria_selection <- function(df_pareto_objectives, z_star
     # geom_line(aes(x = x_lineal, y = y_lineal)) +
     geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
     # geom_point(aes(x = x_circular, y = y_circular))
-  ggsave(filename = paste0("graphs/multi_objective_criteria.pdf"), plot = p)
+  ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p)
 
   return(p)
 }
 
 
-plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]]){
+plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]], color_limits){
   
   rownames(matrix_coefficients) = NULL
   longData = melt(matrix_coefficients)
@@ -1638,12 +1676,34 @@ plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]
   
   p <- ggplot(longData, aes(x = Var2, y = Var1)) + 
     geom_raster(aes(fill=value)) + 
-    scale_fill_gradient(low="grey90", high="red") +
+    scale_fill_gradient(low="grey90", high="red", limits = color_limits) +
     labs(x="users", y="daytime", title="") +
     theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
                        axis.text.y=element_text(size=9),
                        plot.title=element_text(size=11))
   ggsave(filename = paste0("graphs/matrix_",name), plot = p, device = "pdf", width = 6, height = 3)
+  return()
+}
+
+
+plot_tariff_signal()
+    plot_tariff_signal <- function(){
+
+  purchase_price = c(0.14859, 0.14859, 0.14859,  0.14859, 0.14859, 0.14859, 0.14859, 0.14859,   
+                     0.14859*1.2, 0.14859*1.2, 
+                     0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5,
+                     0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+                     0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5,
+                     0.14859*1.2, 0.14859*1.2
+                     ) 
+
+  p <- ggplot() + 
+    geom_line(aes(x=0:23, y=purchase_price)) +
+    labs(x="daytime", y="", title="") +
+    theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
+                       axis.text.y=element_text(size=9),
+                       plot.title=element_text(size=11))
+  ggsave(filename = "graphs/tariff_signal.pdf", plot = p, device = "pdf", width = 6, height = 3)
   return()
 }
 
@@ -1910,7 +1970,14 @@ calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, indi
   surplus_x <- df_gen_assigned - df_cons_selected_day
   surplus_x[surplus_x < 0] = 0
   
-  purchase_price = 0.14859
+  # changed this:
+  # purchase_price = 0.14859
+  purchase_price = c(0.14859, 0.14859, 0.14859, 
+                     0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+                     0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+                     0.14859*1.5) 
+  
+  
   sale_price = 0.0508
   
   cost_old = colSums(purchase_price*df_cons_selected_day)
@@ -1920,7 +1987,10 @@ calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, indi
   
   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
   
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+
+  # changed this:
+  cost_sun = colSums(purchase_price*grid_x) - sale_price * surplus_x_to_sell
+  # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
   profit_one_year = profit_period * 360 
@@ -2019,8 +2089,8 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   rank_1 = (optim$paretoFrontRank == 1)
   
   # df_pareto_objectives = df_pareto_objectives[rank_1, ]
-  # ggplot(df_pareto_objectives) +
-  #   geom_point(aes(x = surplus, y = payback))
+  ggplot(df_pareto_objectives) +
+    geom_point(aes(x = surplus, y = payback))
 
   z_star = data.frame("surplus" = min(df_pareto_objectives$surplus), 
                       "payback" = min(df_pareto_objectives$payback))
@@ -2031,6 +2101,9 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   if(criteria == 1) {
     rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
   }else if(criteria == 2) {
+    # TODO: fix something with scales between variables
+    # rank_1_criteria[] = F
+    # rank_1_criteria[32] = T
     rank_1_criteria = calculate_selected_row_criteria_2(df_pareto_objectives_rank_1, z_star)
   }
   
@@ -2043,7 +2116,7 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   coefficients = coefficients/rowSums(coefficients)
   
   objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
-  plot_multi_objective_criteria_selection(df_pareto_objectives, z_star, objectives_with_criteria)
+  plot_multi_objective_criteria_selection(name = "2", df_pareto_objectives, z_star, objectives_with_criteria)
   
   return(coefficients)
 }
@@ -2065,7 +2138,7 @@ calculate_selected_row_criteria_2 = function(df_pareto_objectives_rank_1, z_star
   # TODO: the calculus of the linear should be included here:
   z_star_long = data.frame(matrix(1, nrow = nrow(df_pareto_objectives_rank_1)) %*% as.matrix(z_star))   
   
-  criteria_selected_row = as.numeric(which.min(rowSums(df_pareto_objectives_rank_1 - z_star_long)**2))
+  criteria_selected_row = as.numeric(which.min(rowSums((df_pareto_objectives_rank_1 - z_star_long)**2)))
   rank_1_criteria = 1:nrow(df_pareto_objectives_rank_1) %in% criteria_selected_row
   return(rank_1_criteria)
 }

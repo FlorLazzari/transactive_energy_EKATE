@@ -116,6 +116,8 @@ global_investment = max(df_gen$energy, na.rm = T)*1100
 n_binary_rep = log(ncol(df_cons), base=2)
 # TODO: should change this
 individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
+# now everyone is investing the same... why 6?? just invented it but should try to find a reference to support this
+individual_investment[] = global_investment/6
 
 # checking:
 # sum(sapply(df_cons, max, na.rm = TRUE)*1100) > global_investment

@@ -1662,7 +1662,7 @@ plot_multi_objective_criteria_selection <- function(name, df_pareto_objectives, 
     # geom_line(aes(x = x_lineal, y = y_lineal)) +
     geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
     # geom_point(aes(x = x_circular, y = y_circular))
-  ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p)
+  ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p, width = 6, height = 3)
 
   return(p)
 }
@@ -1686,8 +1686,7 @@ plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]
 }
 
 
-plot_tariff_signal()
-    plot_tariff_signal <- function(){
+plot_tariff_signal <- function(){
 
   purchase_price = c(0.14859, 0.14859, 0.14859,  0.14859, 0.14859, 0.14859, 0.14859, 0.14859,   
                      0.14859*1.2, 0.14859*1.2, 
@@ -2082,7 +2081,7 @@ selection_according_to_criteria <- function(optim, n_community, n_sunny_hours){
 }
 
 
-selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours, criteria){
+selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
   df_pareto_objectives = data.frame(optim$objectives)  
   colnames(df_pareto_objectives) = c("surplus", "payback")
   
@@ -2116,7 +2115,7 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   coefficients = coefficients/rowSums(coefficients)
   
   objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
-  plot_multi_objective_criteria_selection(name = "2", df_pareto_objectives, z_star, objectives_with_criteria)
+  plot_multi_objective_criteria_selection(name = name_plot, df_pareto_objectives, z_star, objectives_with_criteria)
   
   return(coefficients)
 }

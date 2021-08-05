@@ -22,6 +22,8 @@ individual_investment_selected = calculate_individual_investment(combination_sel
 hourly_surplus = calculate_surplus_hourly_community(combination = combination_selected, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
 pre_surplus = sum(hourly_surplus)
 
+n_community = sum(combination_selected)
+
 ############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
 
 matrix_coefficients_3 = calculate_matrix_coefficients(df_gen_sunny, df_cons_selected_sunny)
@@ -45,8 +47,8 @@ matrix_coefficients_4 = matrix(0, nrow = length(df_gen_sunny), ncol = n_communit
 
 # to check surplus
 n_sunny_hours_start = 1
-# for (month_i in 1:12) {
 for (month_i in 1:12) {
+# for (month_i in 1:2) {
   for (date_i in 1:2) {
     
     print(month_i)
@@ -60,13 +62,15 @@ for (month_i in 1:12) {
     df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
     df_cons_sunny_one_day = df_cons_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
     df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
-
+    
+    purchase_price_sunny = df_purchase_price[df_local_time_first_day$sunny,"price"]
     
     # optimize_hourly_betas_multi_objective_per_combination:
     dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
     optim <- nsga2R_flor(fn = purrr::partial(fitness_MO,
                                              df_gen_sunny = df_gen_sunny_one_day,
                                              df_cons_selected_sunny = df_cons_selected_sunny_one_day,
+                                             purchase_price = purchase_price_sunny,
                                              individual_investment_selected = individual_investment_selected),
                          varNo = dim,
                          objDim = 2,
@@ -81,7 +85,7 @@ for (month_i in 1:12) {
     # criteria 2 = reasonable surplus & payback
     # TODO: is this working?
     # work in "selection_according_to_criteria"
-    matrix_coefficients_month_date = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
+    matrix_coefficients_month_date = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0("normalization", as.character(month_i),"_",as.character(date_i)))
     
     matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
 
@@ -89,10 +93,16 @@ for (month_i in 1:12) {
   }
 }
 
+# matrix_coefficients_4_original = matrix_coefficients_4
+# matrix_coefficients_4_z_norm = matrix_coefficients_4
 
 
 ############################# choose the best combination for each optimization #############################
 
+# TODO (possible plot)
+# inside the: 
+# selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
+# add to the plot the results of the optimization 1, 2 & 3
 
 
 ############################# generate plot #############################
@@ -119,7 +129,7 @@ comparison = data.frame("i_matrix" = factor(1:4),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix, y = comparison$value, fill = comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/test/comparison_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/test/comparison_planning"), plot = p, device = "pdf", width = 8, height = 3)
 
 # GLOBAL PAYBACK
 
@@ -148,7 +158,7 @@ comparison = rbind(comparison_1, comparison_2, comparison_3, comparison_4)
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$i_matrix,  y = comparison$value, fill = comparison$user), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/test/comparison_payback_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/test/comparison_planning"), plot = p, device = "pdf", width = 8, height = 3)
 
 # INDIVIDUAL INVESTMENT
 value_vector = as.numeric(individual_investment_selected)
@@ -157,7 +167,7 @@ comparison = data.frame("user" = factor(1:ncol(df_cons_selected)),
 
 p <- ggplot() +
   geom_bar(aes(x = comparison$user, y = comparison$value), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
-ggsave(filename = paste0("graphs/test/comparison_investment_CASE42"), plot = p, device = "pdf", width = 8, height = 3)
+ggsave(filename = paste0("graphs/test/comparison_planning"), plot = p, device = "pdf", width = 8, height = 3)
 
 
 
@@ -171,41 +181,6 @@ ggsave(filename = paste0("graphs/test/comparison_investment_CASE42"), plot = p, 
 
 
 
-
-
-
-
-
-
-# checking
-pre_payback = calculate_payback_betas_daily(df_cons_selected_sunny_one_day, df_gen_sunny_one_day, individual_investment_selected, matrix_coefficients_3)
-sum(exp(pre_payback - 0))
-sum(calculate_surplus_hourly_community(combination = combination_selected, df_gen = df_gen_sunny_one_day, df_cons = df_cons_sunny_one_day))
-sum(calculate_surplus_hourly_individual_betas(matrix_coefficients_3, df_gen_sunny_one_day, df_cons_selected_sunny_one_day))
-
-# checking
-opt_payback = calculate_payback_betas_daily(df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, coefficients_criteria)
-sum(exp(opt_payback - 0))
-sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny_one_day, df_cons_selected_sunny_one_day))
-###
-
-
-
-# case: if cons 2 and cons 9 are exaclty the same:
-# why is the optimization_MO giving very different surpluses??
-# but the cost they are obtaining is exaclty the same..
-
-# TODO
-# important! when changing the payback ideal the payback_years obtained are exactly the same
-# for simplicity, using payback years = 0 sounds the easiest a quickest way to procede
-# the problem now is how to understand the balance between the surplus and the payback
-# surplus is linear
-# payback is exponential
-# to do this I will use a combination which has surplus > 0 
-
-# from here I can see that the optimum tends tu be simmilar to the "matrix_coefficients_non_optimum" (where the repartition is equi-distributed 1/n_community) 
-# I think this is because the investment is proportional to the consumption..
-# will try changing this
 
 
 

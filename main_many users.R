@@ -10,6 +10,12 @@ library(purrr)
 library(nsga2R)
 source("functions.R")
 
+############################# tariff structure #############################
+
+# TODO: look for reference
+df_purchase_price = data.frame("price" = c(rep(0.15,8), rep(0.18,2), rep(0.26,4), rep(0.15,4), rep(0.26,4), rep(0.18,2)),
+                               "time" = c(0:23))
+
 ############################# select year periods #############################
 
 selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")

@@ -10,12 +10,6 @@ library(purrr)
 library(nsga2R)
 source("functions.R")
 
-############################# tariff structure #############################
-
-# TODO: look for reference
-df_purchase_price = data.frame("price" = c(rep(0.15,8), rep(0.18,2), rep(0.26,4), rep(0.15,4), rep(0.26,4), rep(0.18,2)),
-                               "time" = c(0:23))
-
 ############################# select year periods #############################
 
 selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")
@@ -79,6 +73,16 @@ df_gen_sunny = df_gen[df_local_time$sunny, 2]
 
 # checking:
 # plot(x = 1:nrow(df_gen_characteristic[[12]]), y = df_gen_characteristic[[12]]$energy)
+
+############################# tariff structure #############################
+
+# TODO: look for reference
+# TODO: consider the weekends?
+df_purchase_price_one_day = data.frame("price" = c(rep(0.15,8), rep(0.18,2), rep(0.26,4), rep(0.15,4), rep(0.26,4), rep(0.18,2)),
+                               "time" = c(0:23))
+df_purchase_price = rbind(df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day, df_purchase_price_one_day)
+
+purchase_price_sunny = df_purchase_price[df_local_time$sunny, "price"]
 
 ############################# data reading (genome project) #############################
 

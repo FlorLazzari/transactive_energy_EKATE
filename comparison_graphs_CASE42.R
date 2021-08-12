@@ -53,7 +53,7 @@ matrix_coefficients_4 = selection_according_to_criteria_2(optim, n_community, n_
 
 color_limits = c(min(matrix_coefficients_1, matrix_coefficients_2, matrix_coefficients_3, matrix_coefficients_4), 
                  max(matrix_coefficients_1, matrix_coefficients_2, matrix_coefficients_3, matrix_coefficients_4)
-                 )
+)
 plot_matrix(name = "1", matrix_coefficients_1, color_limits = color_limits)
 plot_matrix(name = "2", matrix_coefficients_2, color_limits = color_limits)
 plot_matrix(name = "3", matrix_coefficients_3, color_limits = color_limits)

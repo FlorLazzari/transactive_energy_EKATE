@@ -516,6 +516,7 @@ nsga2R_flor <- function (fn, varNo, objDim, lowerBounds = rep(-Inf, varNo),
   # cat("\n")
   parent <- t(sapply(1:popSize, function(u) array(runif(length(lowerBounds), 
                                                         lowerBounds, upperBounds))))
+  
   parent <- cbind(parent, t(apply(parent, 1, fn)))
   # cat("ranking the initial population")
   # cat("\n")
@@ -580,6 +581,190 @@ nsga2R_flor <- function (fn, varNo, objDim, lowerBounds = rep(-Inf, varNo),
     # cat("environmental selection")
     # cat("\n")
     parent <- parentNext.sort[1:popSize, ]
+    # cat("---------------generation---------------", iter, 
+    #     "ends")
+    # cat("\n")
+    if (iter != generations) {
+      # cat("\n")
+      # cat("********** new iteration *********")
+      # cat("\n")
+    }
+    else {
+      # cat("********** stop the evolution *********")
+      # cat("\n")
+    }
+  }
+  result = list(functions = fn, parameterDim = varNo, objectiveDim = objDim, 
+                lowerBounds = lowerBounds, upperBounds = upperBounds, 
+                popSize = popSize, tournamentSize = tourSize, generations = generations, 
+                XoverProb = cprob, XoverDistIndex = XoverDistIdx, mutationProb = mprob, 
+                mutationDistIndex = MuDistIdx, parameters = parent[, 
+                                                                   1:varNo], objectives = parent[, (varNo + 1):(varNo + 
+                                                                                                                  objDim)], paretoFrontRank = parent[, varNo + objDim + 
+                                                                                                                                                       1], crowdingDistance = parent[, varNo + objDim + 
+                                                                                                                                                                                       2])
+  class(result) = "nsga2R"
+  cat("********** END *********")
+  return(result)
+}
+
+
+normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
+  genome = as.numeric(t(genome))
+  genome_matrix = matrix(data = genome, ncol = n_community, nrow = n_sunny_hours*popSize, byrow = T)
+  genome_matrix = genome_matrix/rowSums(genome_matrix)
+  # checking
+  # rowSums(genome_matrix)
+  genome = matrix(data = t(genome_matrix), ncol = dim, byrow = T)
+  return(genome)
+}
+
+
+# IMPORTANT: 
+# the nsga2R_flor_normalizing gets worst results than the nsga2R_flor 
+
+# changed all these variables:
+# fn = purrr::partial(fitness_MO_normalizing,
+#                     df_gen_sunny = df_gen_sunny_one_day,
+#                     df_cons_selected_sunny = df_cons_selected_sunny_one_day,
+#                     purchase_price_sunny = purchase_price_sunny,
+#                     individual_investment_selected = individual_investment_selected)
+
+
+# dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
+# fn = purrr::partial(fitness_MO_normalizing,
+#                                          df_gen_sunny = df_gen_sunny_one_day,
+#                                          df_cons_selected_sunny = df_cons_selected_sunny_one_day,
+#                                          purchase_price_sunny = purchase_price_sunny,
+#                                          individual_investment_selected = individual_investment_selected)
+# varNo = dim
+# objDim = 2
+# generations = 100
+# popSize = 50
+# cprob = 0.8
+# mprob = 0.2
+# lowerBounds = rep(0, dim)
+# upperBounds = rep(1, dim)
+
+nsga2R_flor_normalizing <- function (fn = fitness_MO_normalizing, 
+                             varNo = 5, 
+                             objDim = 2, 
+                             lowerBounds = rep(0, varNo), 
+                             upperBounds = rep(10, varNo), 
+                             popSize = 20, 
+                             tourSize = 2, 
+                             generations = 10, 
+                             cprob = 0.7, 
+                             XoverDistIdx = 5, 
+                             mprob = 0.2,
+                             MuDistIdx = 10){
+
+
+  cat("********** R based Nondominated Sorting Genetic Algorithm II *********")
+  cat("\n")
+  # cat("initializing the population")
+  # cat("\n")
+  
+  parent <- t(sapply(1:popSize, function(u) array(runif(length(lowerBounds),
+                                                        lowerBounds, upperBounds))))
+  
+  # parent <- array(runif(length(lowerBounds)*popSize,lowerBounds, upperBounds))
+  
+  parent = normalize_genome(parent, n_community, n_sunny_hours, dim, popSize)
+  # normalization here:
+  # - I am probably altering the distribution of the random generation
+  # - but the crossover will have more sense
+  # (CONCLUSION: it is still a dirty solution, but it is better than the previous one.. no?) 
+  
+  
+  # a = aggregate(x = parent[1, ], list(c(rep(0, 2), rep(1, 3))), sum)
+  # apply(X = parent, MARGIN = 1, function(x){x/})
+  
+  # for the case of int:
+  # TODO: this should include all the hours
+  # parent <- t(sapply(1:popSize, function(u) 
+  #   array(sample.int(n = unique(upperBounds), size = length(lowerBounds), replace = T))))
+  
+  parent <- cbind(parent, t(apply(parent, 1, fn)))
+  # cat("ranking the initial population")
+  # cat("\n")
+  ranking <- fastNonDominatedSorting(parent[, (varNo + 1):(varNo + 
+                                                             objDim)])
+  rnkIndex <- integer(popSize)
+  i <- 1
+  while (i <= length(ranking)) {
+    rnkIndex[ranking[[i]]] <- i
+    i <- i + 1
+  }
+  parent <- cbind(parent, rnkIndex)
+  # cat("crowding distance calculation")
+  # cat("\n")
+  objRange <- apply(parent[, (varNo + 1):(varNo + objDim)], 
+                    2, max) - apply(parent[, (varNo + 1):(varNo + objDim)], 
+                                    2, min)
+  cd <- crowdingDist4frnt(parent, ranking, objRange)
+  parent <- cbind(parent, apply(cd, 1, sum))
+  for (iter in 1:generations) {
+    # cat("---------------generation---------------", iter, 
+    #     "starts")
+    # cat("\n")
+    # cat("tournament selection")
+    # cat("\n")
+    matingPool <- tournamentSelection(parent, popSize, tourSize)
+    # cat("crossover operator")
+    # cat("\n")
+    
+    # TODO: work from here onwards: should not appear floats, only integers
+    childAfterX <- boundedSBXover(matingPool[, 1:varNo], 
+                                  lowerBounds, upperBounds, cprob, XoverDistIdx)
+    
+    # cat("mutation operator")
+    # cat("\n")
+    childAfterM <- boundedPolyMutation(childAfterX, lowerBounds, 
+                                       upperBounds, mprob, MuDistIdx)
+    
+    
+    # normalization here:
+    childAfterM = normalize_genome(childAfterM, n_community, n_sunny_hours, dim, popSize)
+    
+    # checking:
+    # rowSums(childAfterM)
+    
+    # cat("evaluate the objective fns of childAfterM")
+    # cat("\n")
+    childAfterM <- cbind(childAfterM, t(apply(childAfterM, 
+                                              1, fn)))
+    
+    # cat("Rt = Pt + Qt")
+    # cat("\n")
+    parentNext <- rbind(parent[, 1:(varNo + objDim)], childAfterM)
+    
+    # checking:
+    # rowSums(parentNext[,1:varNo])
+    
+    # cat("ranking again")
+    # cat("\n")
+    ranking <- fastNonDominatedSorting(parentNext[, (varNo + 
+                                                       1):(varNo + objDim)])
+    i <- 1
+    while (i <= length(ranking)) {
+      rnkIndex[ranking[[i]]] <- i
+      i <- i + 1
+    }
+    parentNext <- cbind(parentNext, rnkIndex)
+    # cat("crowded comparison again")
+    # cat("\n")
+    objRange <- apply(parentNext[, (varNo + 1):(varNo + 
+                                                  objDim)], 2, max) - apply(parentNext[, (varNo + 
+                                                                                            1):(varNo + objDim)], 2, min)
+    cd <- crowdingDist4frnt(parentNext, ranking, objRange)
+    parentNext <- cbind(parentNext, apply(cd, 1, sum))
+      parentNext.sort <- parentNext[order(parentNext[, varNo + 
+                                                       objDim + 1], -parentNext[, varNo + objDim + 2]), 
+                                    ]
+      # cat("environmental selection")
+      # cat("\n")
+      parent <- parentNext.sort[1:popSize, ]
     # cat("---------------generation---------------", iter, 
     #     "ends")
     # cat("\n")
@@ -779,6 +964,8 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   # TODO:
   f2_payback = sum(exp(payback_years - payback_ideal))
   
+  # f2_payback = sd(payback_years)
+  
   # TODO: add something like this
   # cost_payback_2 = max(payback_years) - min(payback_years) 
   
@@ -789,6 +976,191 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   # took the minus sign because the optimization algo is set to minimize:
   return(c(f1_surplus, f2_payback))
 }
+
+
+fitness_MO_quantos <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
+  
+  # checking:
+  # fitness_MO(runif(dim, 0, 1),
+  #            df_gen_day = df_gen_day,
+  #            df_cons_selected_day = df_cons_selected_day,
+  #            individual_investment_selected = individual_investment_selected)
+  
+  # fn: the fitness function to be minimized
+  # varNo: Number of decision variables
+  # objDim: Number of objective functions
+  # lowerBounds: Lower bounds of each decision variable
+  # upperBounds: Upper bounds of each decision variable
+  # popSize: Size of solution(?) population
+  # generations: Number of generations
+  # cprob: crossover prob
+  # mprob: mutation prob
+  
+  coefficients_x = matrix(data = 0, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients_x_row = table(c(1:n_community))
+  n_size = 25
+  
+  for (i in 1:n_sunny_hours) {
+    coefficients_x_row[] = 0
+    # this will be generated by the GA:
+    x = sample.int(n = n_community, size = n_size, replace = T)
+    each_space = 1/n_size
+    coefficients_x_row_table = table(x)
+    coefficients_x_row[(names(coefficients_x_row) %in% names(coefficients_x_row_table))] = coefficients_x_row_table
+    coefficients_x_row = coefficients_x_row*each_space
+    coefficients_x[i,] = as.numeric(coefficients_x_row)
+  }
+
+  # checking:
+  rowSums(coefficients_x)
+  
+  n_sunny_hours = nrow(df_cons_selected_sunny)
+  n_community = ncol(df_cons_selected_sunny)
+  
+  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients_x = coefficients_x/rowSums(coefficients_x)
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_sunny
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  f1_surplus = sum(surplus_x)
+  
+  # changed this:
+  # purchase_price = 0.14859
+  # purchase_price = c(0.14859, 0.14859, 0.14859, 
+  #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+  #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+  #                    0.14859*1.5) 
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
+  
+  grid_x = df_cons_selected_sunny - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+  
+  # changed this: 
+  # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
+  
+  # assuming period is a DAY
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  
+  ##### TODO PAYBACK
+  payback_years = individual_investment_selected / profit_one_year 
+  
+  # TODO:
+  payback_years[is.na(payback_years)] = 10
+  payback_years[payback_years > 50] = 10
+  
+  payback_ideal = 0
+  # TODO:
+  f2_payback = sum(exp(payback_years - payback_ideal))
+  
+  # f2_payback = sd(payback_years)
+  
+  # TODO: add something like this
+  # cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
+  
+  
+  # return(c(-f1_surplus, -f2_payback))
+  # took the minus sign because the optimization algo is set to minimize:
+  return(c(f1_surplus, f2_payback))
+}
+
+
+fitness_MO_normalizing <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
+  
+  # checking:
+  # fitness_MO(runif(dim, 0, 1),
+  #            df_gen_day = df_gen_day,
+  #            df_cons_selected_day = df_cons_selected_day,
+  #            individual_investment_selected = individual_investment_selected)
+  
+  # fn: the fitness function to be minimized
+  # varNo: Number of decision variables
+  # objDim: Number of objective functions
+  # lowerBounds: Lower bounds of each decision variable
+  # upperBounds: Upper bounds of each decision variable
+  # popSize: Size of solution(?) population
+  # generations: Number of generations
+  # cprob: crossover prob
+  # mprob: mutation prob
+
+  # x = runif(dim, 0, 1)
+  
+  n_sunny_hours = nrow(df_cons_selected_sunny)
+  n_community = ncol(df_cons_selected_sunny)
+  
+  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
+  
+  # checking:
+  # print(rowSums(coefficients_x))
+  
+  surplus_x <- df_gen_assigned - df_cons_selected_sunny
+  surplus_x[surplus_x < 0] = 0
+  
+  # TODO:
+  f1_surplus = sum(surplus_x)
+  
+  # changed this:
+  # purchase_price = 0.14859
+  # purchase_price = c(0.14859, 0.14859, 0.14859, 
+  #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+  #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+  #                    0.14859*1.5) 
+  sale_price = 0.0508
+  
+  cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
+  
+  grid_x = df_cons_selected_sunny - df_gen_assigned
+  grid_x[grid_x < 0] = 0
+  
+  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+  
+  # changed this: 
+  # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
+  
+  # assuming period is a DAY
+  profit_period = cost_old - cost_sun
+  profit_one_year = profit_period * 360 
+  
+  
+  ##### TODO PAYBACK
+  payback_years = individual_investment_selected / profit_one_year 
+  
+  # TODO:
+  payback_years[is.na(payback_years)] = 10
+  payback_years[payback_years > 50] = 10
+  
+  payback_ideal = 0
+  # TODO:
+  f2_payback = sum(exp(payback_years - payback_ideal))
+  
+  # f2_payback = sd(payback_years)
+  
+  # TODO: add something like this
+  # cost_payback_2 = max(payback_years) - min(payback_years) 
+  
+  # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
+  
+  
+  # return(c(-f1_surplus, -f2_payback))
+  # took the minus sign because the optimization algo is set to minimize:
+  return(c(f1_surplus, f2_payback))
+}
+
 
 ############################# analysis ############################## 
 
@@ -1670,6 +2042,33 @@ plot_multi_objective_criteria_selection <- function(name, df_pareto_objectives, 
 }
 
 
+plot_multi_objective_criteria_selection_scenarios <- function(name, df_scenarios, df_pareto_objectives, z_star, objectives_with_criteria){
+  
+  r = (sum(c(objectives_with_criteria$surplus, objectives_with_criteria$payback) - z_star)**2)**0.5  
+  
+  theta = seq(from = 0, to = (2*pi), length.out = 100)
+  x_circular = z_star$surplus + r * cos(theta)
+  y_circular = z_star$payback + r * sin(theta)
+  
+  p = ggplot() +
+    geom_point(aes(x = df_pareto_objectives[, "surplus"], y = df_pareto_objectives[, "payback"])) +
+    geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) +
+    geom_point(aes(x = df_scenarios$surplus[1], y = df_scenarios$payback[1]), shape = 1) +
+    geom_point(aes(x = df_scenarios$surplus[2], y = df_scenarios$payback[2]), shape = 2) +
+    geom_point(aes(x = df_scenarios$surplus[3], y = df_scenarios$payback[3]), shape = 3) 
+        # geom_line(aes(x = x_lineal, y = y_lineal)) +
+    # geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
+  # geom_point(aes(x = x_circular, y = y_circular))
+  print(df_scenarios$surplus[1], df_scenarios$payback[1])
+  print(df_scenarios$surplus[2], df_scenarios$payback[2])
+  print(df_scenarios$surplus[3], df_scenarios$payback[3])
+
+  ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p, width = 6, height = 3)
+  
+  return(p)
+}
+
+
 plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]], color_limits){
   
   rownames(matrix_coefficients) = NULL
@@ -1964,7 +2363,7 @@ calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual
 }
 
 
-calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
+calculate_payback_betas_daily <- function(purchase_price_sunny, df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
   
   df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
   
@@ -1973,15 +2372,15 @@ calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, indi
   
   # changed this:
   # purchase_price = 0.14859
-  purchase_price = c(0.14859, 0.14859, 0.14859, 
-                     0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
-                     0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
-                     0.14859*1.5) 
+  # purchase_price = c(0.14859, 0.14859, 0.14859,
+  #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+  #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+  #                    0.14859*1.5) 
   
   
   sale_price = 0.0508
   
-  cost_old = colSums(purchase_price*df_cons_selected_day)
+  cost_old = colSums(purchase_price_sunny*df_cons_selected_day)
   
   grid_x = df_cons_selected_day - df_gen_assigned
   grid_x[grid_x < 0] = 0
@@ -1990,7 +2389,7 @@ calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, indi
   
 
   # changed this:
-  cost_sun = colSums(purchase_price*grid_x) - sale_price * surplus_x_to_sell
+  cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
   # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
@@ -1998,9 +2397,10 @@ calculate_payback_betas_daily <- function(df_cons_selected_day, df_gen_day, indi
   
   payback_years = individual_investment / profit_one_year 
   
+  # payback_years = sd(payback_years)
   # TODO: 
-  payback_years[is.na(payback_years)] = 1000 
-  
+  payback_years[is.na(payback_years)] = 1000
+
   return(payback_years)
 }
 
@@ -2124,11 +2524,11 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus), 
                                  "payback" = min(df_pareto_objectives_normalized$payback))
 
-  z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
-                             "payback" = min(df_pareto_objectives_z_norm$payback))
+  # z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
+  #                            "payback" = min(df_pareto_objectives_z_norm$payback))
 
   df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
-  df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
+  # df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
   
   # criteria = 0 should never enter here
   if(criteria == 1) {
@@ -2138,7 +2538,7 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
     # rank_1_criteria[] = F
     # rank_1_criteria[32] = T
     rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star)
-    rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star)
+    # rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star)
   }
   
   df_pareto_betas = data.frame(optim$parameters)  
@@ -2155,6 +2555,133 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
   objectives_with_criteria_pre_processing = df_pareto_objectives_rank_1_pre_processing[rank_1_criteria, ]
   plot_multi_objective_criteria_selection(name = paste0("pre_processing_",name_plot), df_pareto_objectives_pre_processing, z_star_pre_processing, objectives_with_criteria_pre_processing)
   
+  
+  return(coefficients)
+}
+
+
+choose_scenarios_normalizing <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
+  
+  df_pareto_objectives = data.frame(optim$objectives)  
+  colnames(df_pareto_objectives) = c("surplus", "payback")
+  rank_1 = (optim$paretoFrontRank == 1)
+  
+  df_pareto_objectives_normalized = apply(df_pareto_objectives, MARGIN = 2, FUN = normalization)
+  df_pareto_objectives_normalized = as.data.frame(df_pareto_objectives_normalized)
+  
+  # df_pareto_objectives_z_norm = scale(df_pareto_objectives, center = T, scale = T)
+  # df_pareto_objectives_z_norm = as.data.frame(df_pareto_objectives_z_norm)
+  
+  # z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
+  #                     "payback" = min(df_pareto_objectives$payback))
+  
+  z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus), 
+                                 "payback" = min(df_pareto_objectives_normalized$payback))
+  
+  # z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
+  #                            "payback" = min(df_pareto_objectives_z_norm$payback))
+  
+  # df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
+  df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
+  # df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
+  
+  # criteria = 0 should never enter here
+  if(criteria == 1) {
+    rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
+  }else if(criteria == 2) {
+    # TODO: fix something with scales between variables
+    # rank_1_criteria[] = F
+    # rank_1_criteria[32] = T
+    # rank_1_criteria = calculate_selected_row_criteria_2(df_pareto_objectives_rank_1, z_star)
+    rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star_normalized)
+    # rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_z_norm_rank_1, z_star_z_norm)
+  }
+  
+  df_pareto_betas = data.frame(optim$parameters)  
+  df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
+  
+  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria_normalized, ])
+  coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  # took this because the results are already normalized:
+  # coefficients = coefficients/rowSums(coefficients)
+  
+  # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  
+  # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  objectives_with_criteria_normalized = df_pareto_objectives_normalized_rank_1[rank_1_criteria_normalized, ]
+  # objectives_with_criteria_z_norm = df_pareto_objectives_rank_1[rank_1_criteria_z_norm, ]
+  
+  # df_scenarios = data.frame("surplus" = 0, "payback" = 0)
+  # # df_scenarios[1, ] = objectives_with_criteria
+  # df_scenarios[2, ] = objectives_with_criteria_normalized
+  # df_scenarios[3, ] = objectives_with_criteria_z_norm
+   
+  plot_multi_objective_criteria_selection(name = name_plot, df_pareto_objectives_normalized, z_star_normalized, objectives_with_criteria_normalized)
+  
+  # objectives_with_criteria_pre_processing = df_pareto_objectives_rank_1_pre_processing[rank_1_criteria, ]
+  # plot_multi_objective_criteria_selection(name = paste0("pre_processing_",name_plot), df_pareto_objectives_pre_processing, z_star_pre_processing, objectives_with_criteria_pre_processing)
+
+  return(coefficients)
+}
+
+
+choose_scenarios <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
+  
+  df_pareto_objectives = data.frame(optim$objectives)  
+  colnames(df_pareto_objectives) = c("surplus", "payback")
+  rank_1 = (optim$paretoFrontRank == 1)
+  
+  # df_pareto_objectives_normalized = apply(df_pareto_objectives, MARGIN = 2, FUN = normalization)
+  # df_pareto_objectives_normalized = as.data.frame(df_pareto_objectives_normalized)
+  
+  # df_pareto_objectives_z_norm = scale(df_pareto_objectives, center = T, scale = T)
+  # df_pareto_objectives_z_norm = as.data.frame(df_pareto_objectives_z_norm)
+  
+  z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
+                      "payback" = min(df_pareto_objectives$payback))
+  
+  # z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus), 
+  #                                "payback" = min(df_pareto_objectives_normalized$payback))
+  
+  # z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
+  #                            "payback" = min(df_pareto_objectives_z_norm$payback))
+  
+  df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
+  # df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
+  # df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
+  
+  # criteria = 0 should never enter here
+  if(criteria == 1) {
+    rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
+  }else if(criteria == 2) {
+    # TODO: fix something with scales between variables
+    rank_1_criteria = calculate_selected_row_criteria_2(df_pareto_objectives_rank_1, z_star)
+    # rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star_normalized)
+    # rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_z_norm_rank_1, z_star_z_norm)
+  }
+  
+  df_pareto_betas = data.frame(optim$parameters)  
+  df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
+  
+  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria, ])
+  coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients = coefficients/rowSums(coefficients)
+  
+  # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  
+  objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  # objectives_with_criteria_normalized = df_pareto_objectives_normalized_rank_1[rank_1_criteria_normalized, ]
+  # objectives_with_criteria_z_norm = df_pareto_objectives_rank_1[rank_1_criteria_z_norm, ]
+  
+  # df_scenarios = data.frame("surplus" = 0, "payback" = 0)
+  # # df_scenarios[1, ] = objectives_with_criteria
+  # df_scenarios[2, ] = objectives_with_criteria_normalized
+  # df_scenarios[3, ] = objectives_with_criteria_z_norm
+  
+  plot_multi_objective_criteria_selection(name = name_plot, df_pareto_objectives, z_star, objectives_with_criteria)
+  
+  # objectives_with_criteria_pre_processing = df_pareto_objectives_rank_1_pre_processing[rank_1_criteria, ]
+  # plot_multi_objective_criteria_selection(name = paste0("pre_processing_",name_plot), df_pareto_objectives_pre_processing, z_star_pre_processing, objectives_with_criteria_pre_processing)
   
   return(coefficients)
 }

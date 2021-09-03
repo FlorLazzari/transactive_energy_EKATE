@@ -1,11 +1,5 @@
 ############################# data reading #############################
 
-# > min(as.Date(df_cons_1$time))
-# [1] "2019-04-30"
-# > max(as.Date(df_cons_1$time))
-# [1] "2020-05-01"
-
-
 import_one_user <- function(filename_1){
   df <- read.csv(file = filename_1, header = TRUE)
   colnames(df) <- c("time", "energy")
@@ -21,86 +15,6 @@ import_data_inergy <- function(filename_1){
   return(df)
 }
 
-
-# import_data_genome_project_public <- function(){
-#   
-#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-#   
-#   meter = read.csv(file = filename, header = TRUE)
-#   meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
-#   
-#   colnames(meter_public)[1] = "time" 
-#   
-#   # selecting users:
-#   hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
-#   
-#   meter_public = meter_public[, c(1,order(hourly_mean)+1)]
-#   meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
-#   
-#   # plot(meter_public[, 2])
-#   meter_public$time = as.POSIXct(meter_public$time)
-#     
-#   return(meter_public)
-# }
-
-
-# import_data_genome_project_public <- function(selected_year_consumption){
-#   
-#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-#   
-#   meter = read.csv(file = filename, header = TRUE)
-#   meter_public = meter[, c(1, grep(pattern = "public", x = colnames(meter)))]
-#   
-#   colnames(meter_public)[1] = "time" 
-#   
-#   # selecting users:
-#   hourly_mean = colMeans(meter_public[2:ncol(meter_public)], na.rm = T)
-#   
-#   meter_public = meter_public[, c(1,order(hourly_mean)+1)]
-#   meter_public = meter_public[, c(1:as.numeric(which(colMeans(meter_public[2:ncol(meter_public)], na.rm = T) > 25)[1]))]
-#   
-#   # plot(meter_public[, 2])
-#   meter_public$time = as.POSIXct(meter_public$time)
-# 
-#   meter_public = meter_public[as.Date(meter_public$time) %in% as.Date(selected_year_consumption), ]
-# 
-#   # filter columns with all nas:
-#   meter_public = meter_public[colSums(is.na(meter_public)) != nrow(meter_public)]
-#   
-#   # filter columns with some na: (this filters too much)
-#   # meter_public = meter_public[colSums(is.na(meter_public)) == 0]
-# 
-#   return(meter_public)
-# }
-# 
-# 
-# import_data_genome_project_office <- function(selected_year_consumption){
-#   
-#   filename = "~/Documents/projects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
-#   
-#   meter = read.csv(file = filename, header = TRUE)
-#   meter_office = meter[, c(1, grep(pattern = "office", x = colnames(meter)))]
-#   
-#   colnames(meter_office)[1] = "time" 
-#   
-#   # selecting users:
-#   hourly_mean = colMeans(meter_office[2:ncol(meter_office)], na.rm = T)
-#   
-#   meter_office = meter_office[, c(1,order(hourly_mean)+1)]
-#   meter_office = meter_office[, c(1:as.numeric(which(colMeans(meter_office[2:ncol(meter_office)], na.rm = T) > 25)[1]))]
-#   
-#   meter_office$time = as.POSIXct(meter_office$time)
-# 
-#   # plot(meter_public[, 2])
-#   
-#   meter_office = meter_office[as.Date(meter_office$time) %in% as.Date(selected_year_consumption), ]
-#   
-#   # filter columns with nas:
-#   meter_office = meter_office[colSums(is.na(meter_office)) != nrow(meter_office)]
-#   
-#   return(meter_office)
-# }
-# 
 
 import_data_genome_project <- function(selected_year_consumption){
   
@@ -182,204 +96,6 @@ reducing_consumption_fake <- function(df){
 
 ############################# operative #############################
 
-optimize_hourly_betas_multi_objective <- function(hourly, weight_surplus, n_community_max, n_binary_rep, df_gen_sunny, df_cons_sunny, global_investment, individual_investment){
-  # TODO: understand the criteria of the keepBest = T
-  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
-  
-  # tic = Sys.time()
-  pre_optimal_combinations <- optimization_1(hourly, n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
-  # toc = Sys.time()
-  # print(toc-tic)
-
-  # not all of the combinations are of the size = n_community_max (some are smaller)
-  
-  # TODO: separate the combinations according to the number n_community_per_combination
-  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
-  
-  # checking:
-  # n_community_per_combination[n_community_per_combination_order]
-  
-  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
-  n_community_vector = rowSums(pre_optimal_combinations)
-  
-  hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
-  pre_surplus = colSums(hourly_surplus)
-  
-  # checking:
-  # colSums(pre_optimal_combinations)
-  # nrow(pre_optimal_combinations)
-  # hist(as.numeric(lapply(X = surplus, FUN = sum)))
-  # sum(df_gen)
-  
-  # new_optimum_coefficients = pre_optimum_coefficients
-  new_surplus = c()
-  new_optimum_coefficients = list()
-  
-  new_payback = df_cons_sunny[0,1:ncol(df_cons_sunny)]
-
-  # pre_payback = pre_optimum_coefficients
-
-  j = 1
-  vector_i = c()
-  
-  tic = Sys.time()
-  for (i in 1:nrow(pre_optimal_combinations)) {
-  # for (i in 1:1) {
-
-    combination_selected = pre_optimal_combinations[i, ]
-    df_cons_selected_sunny = df_cons_sunny[,combination_selected==1]
-    individual_investment_max = individual_investment[combination_selected==1]  
-    
-    # why is this "if" here and not in the end of the pre_optimization? guess it would be the same.. can try moving it
-    if (sum(individual_investment_max) > global_investment) { 
-      
-      coefficients_criteria = optimize_hourly_betas_multi_objective_per_combination(hourly, combination_selected, df_gen_sunny, df_cons_selected_sunny, individual_investment_max)
-
-      combination_optimum = matrix(1, nrow = nrow(coefficients_criteria)) %*% combination_selected
-      combination_optimum[combination_optimum!=0] = coefficients_criteria
-      
-      new_optimum_coefficients[[j]] = coefficients_criteria
-      new_payback[j, combination_selected!=0] = calculate_payback_betas_daily(df_cons_selected_sunny, df_gen_sunny, individual_investment_max, matrix_coefficients = coefficients_criteria)
-      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_criteria, df_gen_sunny, df_cons_selected_sunny))
-      new_surplus <- c(new_surplus, surplus)
-      
-      vector_i = c(vector_i, i)
-      j = j + 1
-    }
-  }
-  toc = Sys.time()
-  print(toc-tic)
-  
-  results = list(
-    # "pre_optimum_coefficients" = pre_optimum_coefficients, 
-    "pre_surplus" = pre_surplus,
-    # "pre_payback" = pre_payback, 
-    "new_optimum_coefficients" = new_optimum_coefficients, 
-    "new_surplus" = new_surplus, 
-    "new_payback" = new_payback, 
-    "vector_i" = vector_i)
-  
-  return(results)
-}
-
-
-optimize_hourly_betas <- function(hourly, weight_surplus, n_community_max, n_binary_rep, df_gen, df_cons, global_investment, individual_investment){
-  
-  # TODO: understand the criteria of the keepBest = T
-  # keepBesta logical argument specifying if best solutions at each iteration should be savedin a slot calledbestSol. Seega-class.
-
-  # TODO: trying the hourly
-  pre_optimal_combinations <- optimization_1(hourly, n_community = n_community_max, n_binary_rep = n_binary_rep, df_gen = df_gen, df_cons = df_cons)
-
-  # not all of the combinations are of the size = n_community_max (some are smaller)
-  
-  # TODO: separate the combinations according to the number n_community_per_combination
-  n_community_per_combination_order = order(rowSums(pre_optimal_combinations))
-  
-  # checking:
-  # n_community_per_combination[n_community_per_combination_order]
-  
-  pre_optimal_combinations = pre_optimal_combinations[n_community_per_combination_order, ]
-  n_community_vector = rowSums(pre_optimal_combinations)
-  
-  # will calculate everything for one day
-  # coefficients will be a matrix of dim = 24*n_community:
-  # will do a for loop to iterate for all the "types of days"
-
-  hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons)
-  pre_surplus = colSums(hourly_surplus)
-  
-  # checking:
-  # colSums(pre_optimal_combinations)
-  # nrow(pre_optimal_combinations)
-  # hist(as.numeric(lapply(X = surplus, FUN = sum)))
-  # sum(df_gen)
-  
-  ##### TODO PAYBACK
-  # new_optimum_coefficients = pre_optimum_coefficients
-  new_surplus = c()
-  new_optimum_coefficients = list()
-  new_payback = df_cons[0,1:ncol(df_cons)]
-
-  # pre_payback = pre_optimum_coefficients
-
-  j = 1
-  vector_i = c()
-  
-  for (i in 1:nrow(pre_optimal_combinations)) {
-  
-    combination_selected = pre_optimal_combinations[i, ]
-    df_cons_selected = df_cons[,combination_selected==1]
-    individual_investment_max = individual_investment[combination_selected==1]  
-
-    if (sum(individual_investment_max) > global_investment) {
-
-      n_community = as.numeric(n_community_vector[i])
-      
-      # x just selects the users, no need to calculate the optimum combination here
-      # I think calculating the coeffs should be inside the "inside GA"
-      # optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
-      
-      individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
-      
-      # just checking
-      # if (any(individual_investment_selected > individual_investment_max)){
-      #   print("fail")
-      # }
-      
-      # pre_payback[i, combination_selected!=0] = calculate_payback(df_cons_selected, df_gen, individual_investment_selected, pre_optimum_coefficients[i,combination_selected!=0])
-      
-      # d = 0
-      
-      # sunny_hours_index = which(df_gen != 0)
-      # df_gen_day = df_gen[sunny_hours_index + (d*24),]
-      # df_cons_selected_user = df_cons_selected[sunny_hours_index + d*24,]
-      
-      n_sunny_hours = nrow(df_cons_selected)      
-      dim = calculate_dim(hourly, n_community, n_sunny_hours)
-
-      optim_results <- ga(type = "real-valued", fitness = fitness_2_betas, 
-                          lower = array(0, dim = dim), upper = array(1, dim = dim),  
-                          df_gen_day = df_gen, df_cons_selected_day = df_cons_selected, combination = combination_selected, 
-                          individual_investment = individual_investment_selected, 
-                          weight_surplus = weight_surplus, 
-                          popSize = 100, maxiter = 10, run = 10)
-
-      coefficients_optimum <- optim_results@solution[1, ]
-      coefficients_optimum = matrix(data = coefficients_optimum, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-      # coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-
-      coefficients_optimum = coefficients_optimum/rowSums(coefficients_optimum)
-      
-      combination_optimum = matrix(1, nrow = nrow(coefficients_optimum)) %*% combination_selected
-      combination_optimum[combination_optimum!=0] = coefficients_optimum
-      
-      new_optimum_coefficients[[j]] = coefficients_optimum
-      
-      new_payback[j, combination_selected!=0] = calculate_payback_betas(df_cons_selected, df_gen, individual_investment_selected, matrix_coefficients = coefficients_optimum)
-      
-      surplus = sum(calculate_surplus_hourly_individual_betas(coefficients_optimum, df_gen, df_cons_selected))
-      
-      new_surplus <- c(new_surplus, surplus)
-      
-      vector_i = c(vector_i, i)
-      j = j + 1
-    }
-  }
-  
-  results = list(
-                 # "pre_optimum_coefficients" = pre_optimum_coefficients, 
-                 "pre_surplus" = pre_surplus,
-                 # "pre_payback" = pre_payback, 
-                 "new_optimum_coefficients" = new_optimum_coefficients, 
-                 "new_surplus" = new_surplus, 
-                 "new_payback" = new_payback, 
-                 "vector_i" = vector_i)
-  
-  return(results)
-}
-
-
 calculate_surplus_hourly_individual <- function(df_gen, df_cons, combination){
   not_selected_cons = (combination == 0) 
   df_cons[, not_selected_cons] = 0
@@ -403,24 +119,6 @@ calculate_gen_assigned <- function(df_gen, combination){
   df_gen_assigned <- as.data.frame(df_gen * combination[col(df_gen)])  
   return(df_gen_assigned)
 }
-
-
-
-# bee_uCrossover_float_betas <- function(object, parents, n_binary_rep, n_community){
-# 
-#   data = runif(n_community*24*2, 0, 1)
-#       
-#   # data = c(1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-#   parents <- matrix(data = data, nrow = 2, byrow = T)
-#   
-#   parents <- object@population[parents,,drop = FALSE]
-#   u <- unlist(lapply(X = 1:n_community,function(i)rep(runif(1), 24)))
-#   children <- parents
-#   children[1:2, u > 0.5] <- children[2:1, u > 0.5]
-#   out <- list(children = children, fitness = rep(NA,2))  
-#   
-#   return(out)
-# }
 
 
 optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
@@ -487,7 +185,6 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
 
   return(combinations_ordered_filtered)
 }
-
 
 
 # TODO: study more about crossovers and elaborate a better one
@@ -624,7 +321,7 @@ normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
 # the nsga2R_flor_normalizing gets worst results than the nsga2R_flor 
 
 # changed all these variables:
-# fn = purrr::partial(fitness_MO_normalizing,
+# fn = purrr::partial(fitness_MO_constraint,
 #                     df_gen_sunny = df_gen_sunny_one_day,
 #                     df_cons_selected_sunny = df_cons_selected_sunny_one_day,
 #                     purchase_price_sunny = purchase_price_sunny,
@@ -632,7 +329,7 @@ normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
 
 
 # dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
-# fn = purrr::partial(fitness_MO_normalizing,
+# fn = purrr::partial(fitness_MO_constraint,
 #                                          df_gen_sunny = df_gen_sunny_one_day,
 #                                          df_cons_selected_sunny = df_cons_selected_sunny_one_day,
 #                                          purchase_price_sunny = purchase_price_sunny,
@@ -646,7 +343,7 @@ normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
 # lowerBounds = rep(0, dim)
 # upperBounds = rep(1, dim)
 
-nsga2R_flor_normalizing <- function (fn = fitness_MO_normalizing, 
+nsga2R_flor_constraint <- function (fn = fitness_MO_constraint, 
                              varNo = 5, 
                              objDim = 2, 
                              lowerBounds = rep(0, varNo), 
@@ -796,23 +493,6 @@ nsga2R_flor_normalizing <- function (fn = fitness_MO_normalizing,
 ############################# fitness #############################
 
 
-fitness_1 <- function(x, n_community, n_binary_rep, df_gen, df_cons){
-  
-  # tests -> lower number, bigger number:
-  # x = rep(0, n_binary_rep*n_community)
-  # x = rep(1, n_binary_rep*n_community)
-  
-  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep)
-  
-  optimum_coefficients = calculate_coefficients(df_gen, df_cons, combination)
-  
-  surplus = sum(calculate_surplus_hourly_individual(df_gen, df_cons, optimum_coefficients))
-  score <- surplus
-  
-  return(-score)
-}
-
-
 fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   
   # tests -> lower number, bigger number:
@@ -826,73 +506,6 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   
   return(-score)
 }
-
-
-fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, individual_investment_selected, weight_surplus, payback_ideal){
-  
-  # x = runif(dim, 0, 1)
-  
-  n_sunny_hours = nrow(df_cons_selected_day)
-  n_community = ncol(df_cons_selected_day)
-  
-  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-  coefficients_x = coefficients_x/rowSums(coefficients_x)
-  
-  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients = coefficients_x)
-  
-  # checking:
-  # coefficients_x
-  # df_gen_assigned/df_gen
-  # identical(rowSums(df_gen_assigned), df_gen)   
-  
-  surplus_x <- df_gen_assigned - df_cons_selected_day
-  surplus_x[surplus_x < 0] = 0
-  
-  # TODO:
-  cost_surplus = sum(surplus_x)
-  
-  purchase_price = 0.14859
-  sale_price = 0.0508
-  
-  cost_old = colSums(purchase_price*df_cons_selected_day)
-  
-  grid_x = df_cons_selected_day - df_gen_assigned
-  grid_x[grid_x < 0] = 0
-  
-  # checking: this should be zero
-  # max(abs(-as.matrix(df_cons_selected) + as.matrix(grid_x) + as.matrix(df_gen_assigned) - as.matrix(surplus_x)))
-  
-  # TODO: change the "sale_price * coefficients_x * sum(surplus_x)" 
-  # this makes no sense with hourly betas
-  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
-  
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
-  
-  profit_period = cost_old - cost_sun
-  profit_one_year = profit_period * 360 
-  
-  ##### TODO PAYBACK
-  payback_years = individual_investment_selected / profit_one_year 
-  
-  # TODO:
-  payback_years[is.na(payback_years)] = 100 
-  
-  # TODO: payback ideal?
-  # payback_ideal = 1
-  
-  # TODO:
-  cost_payback = sum(exp(payback_years - payback_ideal))
-  # TODO: add something like this
-  cost_payback_2 = max(payback_years) - min(payback_years) 
-  
-  # score <- cost_surplus * cost_payback
-  
-  score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
-  # score <- 1
-  
-  return(-score)
-}
-
 
 # TODO: change by purchase_price_sunny everywhere!
 fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
@@ -949,7 +562,11 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
   
   # assuming period is a DAY
-  profit_period = cost_old - cost_sun
+  # profit_period = cost_old - cost_sun
+  
+  # TODO: is this changing something?
+  profit_period = ifelse(cost_old - cost_sun > 0, cost_old - cost_sun, 0)
+  
   profit_one_year = profit_period * 360 
   
   
@@ -978,106 +595,106 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
 }
 
 
-fitness_MO_quantos <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
-  
-  # checking:
-  # fitness_MO(runif(dim, 0, 1),
-  #            df_gen_day = df_gen_day,
-  #            df_cons_selected_day = df_cons_selected_day,
-  #            individual_investment_selected = individual_investment_selected)
-  
-  # fn: the fitness function to be minimized
-  # varNo: Number of decision variables
-  # objDim: Number of objective functions
-  # lowerBounds: Lower bounds of each decision variable
-  # upperBounds: Upper bounds of each decision variable
-  # popSize: Size of solution(?) population
-  # generations: Number of generations
-  # cprob: crossover prob
-  # mprob: mutation prob
-  
-  coefficients_x = matrix(data = 0, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-  coefficients_x_row = table(c(1:n_community))
-  n_size = 25
-  
-  for (i in 1:n_sunny_hours) {
-    coefficients_x_row[] = 0
-    # this will be generated by the GA:
-    x = sample.int(n = n_community, size = n_size, replace = T)
-    each_space = 1/n_size
-    coefficients_x_row_table = table(x)
-    coefficients_x_row[(names(coefficients_x_row) %in% names(coefficients_x_row_table))] = coefficients_x_row_table
-    coefficients_x_row = coefficients_x_row*each_space
-    coefficients_x[i,] = as.numeric(coefficients_x_row)
-  }
+# fitness_MO_quantos <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
+#   
+#   # checking:
+#   # fitness_MO(runif(dim, 0, 1),
+#   #            df_gen_day = df_gen_day,
+#   #            df_cons_selected_day = df_cons_selected_day,
+#   #            individual_investment_selected = individual_investment_selected)
+#   
+#   # fn: the fitness function to be minimized
+#   # varNo: Number of decision variables
+#   # objDim: Number of objective functions
+#   # lowerBounds: Lower bounds of each decision variable
+#   # upperBounds: Upper bounds of each decision variable
+#   # popSize: Size of solution(?) population
+#   # generations: Number of generations
+#   # cprob: crossover prob
+#   # mprob: mutation prob
+#   
+#   coefficients_x = matrix(data = 0, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+#   coefficients_x_row = table(c(1:n_community))
+#   n_size = 25
+#   
+#   for (i in 1:n_sunny_hours) {
+#     coefficients_x_row[] = 0
+#     # this will be generated by the GA:
+#     x = sample.int(n = n_community, size = n_size, replace = T)
+#     each_space = 1/n_size
+#     coefficients_x_row_table = table(x)
+#     coefficients_x_row[(names(coefficients_x_row) %in% names(coefficients_x_row_table))] = coefficients_x_row_table
+#     coefficients_x_row = coefficients_x_row*each_space
+#     coefficients_x[i,] = as.numeric(coefficients_x_row)
+#   }
+# 
+#   # checking:
+#   rowSums(coefficients_x)
+#   
+#   n_sunny_hours = nrow(df_cons_selected_sunny)
+#   n_community = ncol(df_cons_selected_sunny)
+#   
+#   coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+#   coefficients_x = coefficients_x/rowSums(coefficients_x)
+#   
+#   df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
+#   
+#   surplus_x <- df_gen_assigned - df_cons_selected_sunny
+#   surplus_x[surplus_x < 0] = 0
+#   
+#   # TODO:
+#   f1_surplus = sum(surplus_x)
+#   
+#   # changed this:
+#   # purchase_price = 0.14859
+#   # purchase_price = c(0.14859, 0.14859, 0.14859, 
+#   #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
+#   #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
+#   #                    0.14859*1.5) 
+#   sale_price = 0.0508
+#   
+#   cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
+#   
+#   grid_x = df_cons_selected_sunny - df_gen_assigned
+#   grid_x[grid_x < 0] = 0
+#   
+#   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
+#   
+#   # changed this: 
+#   # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+#   cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
+#   
+#   # assuming period is a DAY
+#   profit_period = cost_old - cost_sun
+#   profit_one_year = profit_period * 360 
+#   
+#   
+#   ##### TODO PAYBACK
+#   payback_years = individual_investment_selected / profit_one_year 
+#   
+#   # TODO:
+#   payback_years[is.na(payback_years)] = 10
+#   payback_years[payback_years > 50] = 10
+#   
+#   payback_ideal = 0
+#   # TODO:
+#   f2_payback = sum(exp(payback_years - payback_ideal))
+#   
+#   # f2_payback = sd(payback_years)
+#   
+#   # TODO: add something like this
+#   # cost_payback_2 = max(payback_years) - min(payback_years) 
+#   
+#   # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
+#   
+#   
+#   # return(c(-f1_surplus, -f2_payback))
+#   # took the minus sign because the optimization algo is set to minimize:
+#   return(c(f1_surplus, f2_payback))
+# }
 
-  # checking:
-  rowSums(coefficients_x)
-  
-  n_sunny_hours = nrow(df_cons_selected_sunny)
-  n_community = ncol(df_cons_selected_sunny)
-  
-  coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-  coefficients_x = coefficients_x/rowSums(coefficients_x)
-  
-  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
-  
-  surplus_x <- df_gen_assigned - df_cons_selected_sunny
-  surplus_x[surplus_x < 0] = 0
-  
-  # TODO:
-  f1_surplus = sum(surplus_x)
-  
-  # changed this:
-  # purchase_price = 0.14859
-  # purchase_price = c(0.14859, 0.14859, 0.14859, 
-  #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
-  #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
-  #                    0.14859*1.5) 
-  sale_price = 0.0508
-  
-  cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
-  
-  grid_x = df_cons_selected_sunny - df_gen_assigned
-  grid_x[grid_x < 0] = 0
-  
-  surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
-  
-  # changed this: 
-  # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
-  cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
-  
-  # assuming period is a DAY
-  profit_period = cost_old - cost_sun
-  profit_one_year = profit_period * 360 
-  
-  
-  ##### TODO PAYBACK
-  payback_years = individual_investment_selected / profit_one_year 
-  
-  # TODO:
-  payback_years[is.na(payback_years)] = 10
-  payback_years[payback_years > 50] = 10
-  
-  payback_ideal = 0
-  # TODO:
-  f2_payback = sum(exp(payback_years - payback_ideal))
-  
-  # f2_payback = sd(payback_years)
-  
-  # TODO: add something like this
-  # cost_payback_2 = max(payback_years) - min(payback_years) 
-  
-  # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
-  
-  
-  # return(c(-f1_surplus, -f2_payback))
-  # took the minus sign because the optimization algo is set to minimize:
-  return(c(f1_surplus, f2_payback))
-}
 
-
-fitness_MO_normalizing <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
+fitness_MO_constraint <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
   
   # checking:
   # fitness_MO(runif(dim, 0, 1),
@@ -1183,6 +800,7 @@ convergence_speed <- function(n_community_max, n_binary_rep, df_gen, df_cons, gl
     plot_best_combination(best_combination, iteration = i)
   }
 }
+
 
 
 ############################# plot ############################## 
@@ -1518,112 +1136,112 @@ plot_disaggregated_daily_mean_community_betas <- function(name, df_gen_assigned,
 }
 
 
-plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, matrix_coefficients = best_combination$optimum_coefficients, df_local_time){
-  
-  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
-  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
-
-  # calculate solar consumption and surplus
-  # df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
-  
-  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
-  solar_surplus[solar_surplus < 0] = 0
-  
-  grid = df_cons_selected_users_sunny - df_gen_assigned
-  grid[grid < 0] = 0
-  
-  # add hour column
-  # df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
-  # solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
-  grid$hour = df_local_time$hour[df_local_time$sunny]
-  df_cons_selected_users$hour = df_local_time$hour
-  # 
-  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
-  # 
-  # df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
-  # df_aux[,-ncol(df_aux)] = 0
-  # 
-  # # df_solar_consumption = rbind(df_solar_consumption, df_aux)
-  # solar_surplus = rbind(solar_surplus, df_aux)
-  
-  n_community = ncol(df_gen_assigned)
-  
-  ###
-  
-  # n_community = length(optimum_combination)
-  matrix_coefficients_non_optimum = matrix_coefficients
-  matrix_coefficients_non_optimum[,] = 1/n_community
-    
-  df_gen_assigned_non_optimum = calculate_gen_assigned_betas(df_gen_day = df_gen[df_local_time$sunny,], matrix_coefficients = matrix_coefficients_non_optimum)
-  colnames(df_gen_assigned_non_optimum) = colnames(df_gen_assigned)
-
-  # calculate solar consumption and surplus
-  # df_solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_non_optimum, df_cons_selected_users_sunny)
-  
-  # colnames(df_solar_consumption_non_optimum) = colnames(df_solar_consumption)
-  
-  solar_surplus_non_optimum <- df_gen_assigned_non_optimum - df_cons_selected_users_sunny
-  solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
-  
-  grid_non_optimum = df_cons_selected_users_sunny - df_gen_assigned_non_optimum
-  grid_non_optimum[grid_non_optimum < 0] = 0
-  
-  # add hour column
-  # df_solar_consumption_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
-  # solar_surplus_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
-  grid_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
-  # 
-  grid_non_optimum = rbind(grid_non_optimum, df_cons_selected_users[!df_cons_selected_users$hour %in% grid_non_optimum$hour,])
-  
-  # df_solar_consumption_non_optimum = rbind(df_solar_consumption_non_optimum, df_aux)
-  # solar_surplus_non_optimum = rbind(solar_surplus_non_optimum, df_aux)
-
-  # solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
-  # solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
-  # solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
-  # grid_non_optimum = df_cons_selected - df_gen_assigned_selected_non_optimum
-  # grid_non_optimum[grid_non_optimum < 0] = 0
-
-  ###
-  df_cons_selected_users = df_cons_selected_users[, -ncol(df_cons_selected_users)]
-  grid = grid[, -ncol(grid)]
-  grid_non_optimum = grid_non_optimum[, -ncol(grid_non_optimum)]
-  
-  solar_surplus_to_sell = ifelse(colSums(solar_surplus) < colSums(grid), colSums(solar_surplus), colSums(grid))
-  solar_surplus_to_sell_non_optimum = ifelse(colSums(solar_surplus_non_optimum) < colSums(grid_non_optimum), colSums(solar_surplus_non_optimum), colSums(grid_non_optimum))
-
-  purchase_price = 0.14859
-  sale_price = 0.0508
-
-  cost_old = colSums(purchase_price*df_cons_selected_users)
-
-  cost_sun = purchase_price*colSums(grid) - sale_price * solar_surplus_to_sell
-  cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * solar_surplus_to_sell_non_optimum
-    
-  cost_old_one_year = cost_old * 360 
-  cost_sun_one_year = cost_sun * 360 
-  cost_sun_non_optimum_one_year = cost_sun_non_optimum * 360 
-  
-  cost_old_20_years = cost_old_one_year * 20
-  cost_sun_20_years = cost_sun_one_year * 20
-  cost_sun_non_optimum_20_years = cost_sun_non_optimum_one_year * 20
-
-  # bar graph: what would you have paid in the following 20 years?
-  # .with the optimum community
-  # .with the non optimum community
-  # .without the community
-  
-  costs_comparison = as.data.frame(rbind(cost_old_20_years, cost_sun_20_years, cost_sun_non_optimum_20_years))
-  costs_comparison$names = rownames(costs_comparison)
-  costs_comparison = melt(data = costs_comparison, id.vars = "names") 
-       
-  p <- ggplot() +
-    geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
-    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_20_years), alpha = 0.5, width = 1, stat = "identity") +
-    # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_non_optimum_one_year), alpha = 0.5, width = 1, stat = "identity") +
-    # scale_x_continuous(breaks = 1:nrow(costs_comparison)) 
-  ggsave(filename = paste0("graphs/costs_comparison"), plot = p, device = "pdf", width = 8, height = 3)
-}
+# plot_economic_comparison_betas <- function(df_gen, df_gen_assigned, df_cons_selected_users, matrix_coefficients = best_combination$optimum_coefficients, df_local_time){
+#   
+#   df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+#   colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+# 
+#   # calculate solar consumption and surplus
+#   # df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
+#   
+#   solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+#   solar_surplus[solar_surplus < 0] = 0
+#   
+#   grid = df_cons_selected_users_sunny - df_gen_assigned
+#   grid[grid < 0] = 0
+#   
+#   # add hour column
+#   # df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+#   # solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
+#   grid$hour = df_local_time$hour[df_local_time$sunny]
+#   df_cons_selected_users$hour = df_local_time$hour
+#   # 
+#   grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
+#   # 
+#   # df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
+#   # df_aux[,-ncol(df_aux)] = 0
+#   # 
+#   # # df_solar_consumption = rbind(df_solar_consumption, df_aux)
+#   # solar_surplus = rbind(solar_surplus, df_aux)
+#   
+#   n_community = ncol(df_gen_assigned)
+#   
+#   ###
+#   
+#   # n_community = length(optimum_combination)
+#   matrix_coefficients_non_optimum = matrix_coefficients
+#   matrix_coefficients_non_optimum[,] = 1/n_community
+#     
+#   df_gen_assigned_non_optimum = calculate_gen_assigned_betas(df_gen_day = df_gen[df_local_time$sunny,], matrix_coefficients = matrix_coefficients_non_optimum)
+#   colnames(df_gen_assigned_non_optimum) = colnames(df_gen_assigned)
+# 
+#   # calculate solar consumption and surplus
+#   # df_solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_non_optimum, df_cons_selected_users_sunny)
+#   
+#   # colnames(df_solar_consumption_non_optimum) = colnames(df_solar_consumption)
+#   
+#   solar_surplus_non_optimum <- df_gen_assigned_non_optimum - df_cons_selected_users_sunny
+#   solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
+#   
+#   grid_non_optimum = df_cons_selected_users_sunny - df_gen_assigned_non_optimum
+#   grid_non_optimum[grid_non_optimum < 0] = 0
+#   
+#   # add hour column
+#   # df_solar_consumption_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
+#   # solar_surplus_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
+#   grid_non_optimum$hour = df_local_time$hour[df_local_time$sunny]
+#   # 
+#   grid_non_optimum = rbind(grid_non_optimum, df_cons_selected_users[!df_cons_selected_users$hour %in% grid_non_optimum$hour,])
+#   
+#   # df_solar_consumption_non_optimum = rbind(df_solar_consumption_non_optimum, df_aux)
+#   # solar_surplus_non_optimum = rbind(solar_surplus_non_optimum, df_aux)
+# 
+#   # solar_consumption_non_optimum = calculate_solar_consumption(df_gen_assigned_selected, df_cons_selected)
+#   # solar_surplus_non_optimum <- df_gen_assigned_selected - df_cons_selected
+#   # solar_surplus_non_optimum[solar_surplus_non_optimum < 0] = 0
+#   # grid_non_optimum = df_cons_selected - df_gen_assigned_selected_non_optimum
+#   # grid_non_optimum[grid_non_optimum < 0] = 0
+# 
+#   ###
+#   df_cons_selected_users = df_cons_selected_users[, -ncol(df_cons_selected_users)]
+#   grid = grid[, -ncol(grid)]
+#   grid_non_optimum = grid_non_optimum[, -ncol(grid_non_optimum)]
+#   
+#   solar_surplus_to_sell = ifelse(colSums(solar_surplus) < colSums(grid), colSums(solar_surplus), colSums(grid))
+#   solar_surplus_to_sell_non_optimum = ifelse(colSums(solar_surplus_non_optimum) < colSums(grid_non_optimum), colSums(solar_surplus_non_optimum), colSums(grid_non_optimum))
+# 
+#   purchase_price = 0.14859
+#   sale_price = 0.0508
+# 
+#   cost_old = colSums(purchase_price*df_cons_selected_users)
+# 
+#   cost_sun = purchase_price*colSums(grid) - sale_price * solar_surplus_to_sell
+#   cost_sun_non_optimum = purchase_price*colSums(grid_non_optimum) - sale_price * solar_surplus_to_sell_non_optimum
+#     
+#   cost_old_one_year = cost_old * 360 
+#   cost_sun_one_year = cost_sun * 360 
+#   cost_sun_non_optimum_one_year = cost_sun_non_optimum * 360 
+#   
+#   cost_old_20_years = cost_old_one_year * 20
+#   cost_sun_20_years = cost_sun_one_year * 20
+#   cost_sun_non_optimum_20_years = cost_sun_non_optimum_one_year * 20
+# 
+#   # bar graph: what would you have paid in the following 20 years?
+#   # .with the optimum community
+#   # .with the non optimum community
+#   # .without the community
+#   
+#   costs_comparison = as.data.frame(rbind(cost_old_20_years, cost_sun_20_years, cost_sun_non_optimum_20_years))
+#   costs_comparison$names = rownames(costs_comparison)
+#   costs_comparison = melt(data = costs_comparison, id.vars = "names") 
+#        
+#   p <- ggplot() +
+#     geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$names), alpha = 0.5, width = 1, stat = "identity", position=position_dodge()) 
+#     # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_20_years), alpha = 0.5, width = 1, stat = "identity") +
+#     # geom_bar(aes(x = 1:nrow(costs_comparison), y = costs_comparison$cost_sun_non_optimum_one_year), alpha = 0.5, width = 1, stat = "identity") +
+#     # scale_x_continuous(breaks = 1:nrow(costs_comparison)) 
+#   ggsave(filename = paste0("graphs/costs_comparison"), plot = p, device = "pdf", width = 8, height = 3)
+# }
 
 
 plot_optimization1_vs_optimization2 <- function(optimal_combination_using_2_GAs){
@@ -2241,42 +1859,6 @@ calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep,  d
 }
 
 
-calculate_coefficients <- function(df_gen, df_cons, combination){
-  
-  # individual_hourly_surplus = calculate_surplus_hourly_individual(df_gen, df_cons, combination)
-  # # TODO: check with pencil and paper that this is the correct way to calculate the coefficients
-  # # this is the same as taking the mean of the hourly coefficients but, 
-  # # I would like to take the coefficient of the hour(s) of maximum generation
-  # surplus = sum(individual_hourly_surplus)
-  # optimum_coefficients = surplus/colSums(individual_hourly_surplus)
-  # optimum_coefficients[is.infinite(optimum_coefficients)] = NA
-  # optimum_coefficients = optimum_coefficients/sum(optimum_coefficients, na.rm = T)
-  # optimum_coefficients[is.na(optimum_coefficients)] = 0
-
-  not_selected_cons = (combination == 0) 
-  df_cons[, not_selected_cons] = 0
-  
-  df_gen_assigned <- calculate_gen_assigned(df_gen, combination)
-  
-  optimum_coefficients = df_cons/df_gen_assigned
-  optimum_coefficients = optimum_coefficients/sum(optimum_coefficients, na.rm = T)
-
-  return(optimum_coefficients)
-}
-
-
-calculate_matrix_coefficients <- function(df_gen, df_cons_selected){
-  df_gen_assigned <- calculate_gen_assigned(df_gen, combination = rep(1, length(df_cons_selected)))
-  
-  optimum_coefficients = df_cons_selected/df_gen_assigned
-  optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
-  
-  matrix_coefficients = as.matrix(optimum_coefficients)
-  
-  return(matrix_coefficients)
-}
-
-
 calculate_individual_investment <- function(combination, global_investment, individual_investment_max){
   
   individual_investment = individual_investment_max * ( global_investment/sum(individual_investment_max) )  
@@ -2321,34 +1903,23 @@ calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
 }
 
 
-calculate_surplus_hourly_individual_betas <- function(matrix_coefficients, df_gen_day, df_cons_selected_day){
-  
-  df_gen_assigned <- calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
-  individual_hourly_surplus <- df_gen_assigned - df_cons_selected_day
-  individual_hourly_surplus[individual_hourly_surplus < 0] = 0
-  
-  return(individual_hourly_surplus)
-}
-
-
-calculate_payback_betas <- function(df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
+calculate_payback_betas <- function(purchase_price_sunny, df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
   
   df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
   
   surplus_x <- df_gen_assigned - df_cons_selected_day
   surplus_x[surplus_x < 0] = 0
 
-  purchase_price = 0.14859
   sale_price = 0.0508
   
-  cost_old = colSums(purchase_price*df_cons_selected_day)
+  cost_old = colSums(purchase_price_sunny*df_cons_selected_day)
   
   grid_x = df_cons_selected_day - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
   
-  cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
+  cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
   
   profit_period = cost_old - cost_sun
   ##### TODO PAYBACK: this 360 should change
@@ -2369,14 +1940,6 @@ calculate_payback_betas_daily <- function(purchase_price_sunny, df_cons_selected
   
   surplus_x <- df_gen_assigned - df_cons_selected_day
   surplus_x[surplus_x < 0] = 0
-  
-  # changed this:
-  # purchase_price = 0.14859
-  # purchase_price = c(0.14859, 0.14859, 0.14859,
-  #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
-  #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
-  #                    0.14859*1.5) 
-  
   
   sale_price = 0.0508
   
@@ -2560,7 +2123,7 @@ selection_according_to_criteria_2 <- function(optim, n_community, n_sunny_hours,
 }
 
 
-choose_scenarios_normalizing <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
+choose_scenarios <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
   
   df_pareto_objectives = data.frame(optim$objectives)  
   colnames(df_pareto_objectives) = c("surplus", "payback")
@@ -2572,16 +2135,16 @@ choose_scenarios_normalizing <- function(optim, n_community, n_sunny_hours, crit
   # df_pareto_objectives_z_norm = scale(df_pareto_objectives, center = T, scale = T)
   # df_pareto_objectives_z_norm = as.data.frame(df_pareto_objectives_z_norm)
   
-  # z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
-  #                     "payback" = min(df_pareto_objectives$payback))
+  z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
+                      "payback" = min(df_pareto_objectives$payback))
   
-  z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus), 
+  z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus),
                                  "payback" = min(df_pareto_objectives_normalized$payback))
   
   # z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
   #                            "payback" = min(df_pareto_objectives_z_norm$payback))
   
-  # df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
+  df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
   df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
   # df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
   
@@ -2590,8 +2153,6 @@ choose_scenarios_normalizing <- function(optim, n_community, n_sunny_hours, crit
     rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
   }else if(criteria == 2) {
     # TODO: fix something with scales between variables
-    # rank_1_criteria[] = F
-    # rank_1_criteria[32] = T
     # rank_1_criteria = calculate_selected_row_criteria_2(df_pareto_objectives_rank_1, z_star)
     rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star_normalized)
     # rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_z_norm_rank_1, z_star_z_norm)
@@ -2600,76 +2161,13 @@ choose_scenarios_normalizing <- function(optim, n_community, n_sunny_hours, crit
   df_pareto_betas = data.frame(optim$parameters)  
   df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
   
-  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria_normalized, ])
-  coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-  # took this because the results are already normalized:
-  # coefficients = coefficients/rowSums(coefficients)
-  
-  # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
-  
-  # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
-  objectives_with_criteria_normalized = df_pareto_objectives_normalized_rank_1[rank_1_criteria_normalized, ]
-  # objectives_with_criteria_z_norm = df_pareto_objectives_rank_1[rank_1_criteria_z_norm, ]
-  
-  # df_scenarios = data.frame("surplus" = 0, "payback" = 0)
-  # # df_scenarios[1, ] = objectives_with_criteria
-  # df_scenarios[2, ] = objectives_with_criteria_normalized
-  # df_scenarios[3, ] = objectives_with_criteria_z_norm
-   
-  plot_multi_objective_criteria_selection(name = name_plot, df_pareto_objectives_normalized, z_star_normalized, objectives_with_criteria_normalized)
-  
-  # objectives_with_criteria_pre_processing = df_pareto_objectives_rank_1_pre_processing[rank_1_criteria, ]
-  # plot_multi_objective_criteria_selection(name = paste0("pre_processing_",name_plot), df_pareto_objectives_pre_processing, z_star_pre_processing, objectives_with_criteria_pre_processing)
-
-  return(coefficients)
-}
-
-
-choose_scenarios <- function(optim, n_community, n_sunny_hours, criteria, name_plot){
-  
-  df_pareto_objectives = data.frame(optim$objectives)  
-  colnames(df_pareto_objectives) = c("surplus", "payback")
-  rank_1 = (optim$paretoFrontRank == 1)
-  
-  # df_pareto_objectives_normalized = apply(df_pareto_objectives, MARGIN = 2, FUN = normalization)
-  # df_pareto_objectives_normalized = as.data.frame(df_pareto_objectives_normalized)
-  
-  # df_pareto_objectives_z_norm = scale(df_pareto_objectives, center = T, scale = T)
-  # df_pareto_objectives_z_norm = as.data.frame(df_pareto_objectives_z_norm)
-  
-  z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
-                      "payback" = min(df_pareto_objectives$payback))
-  
-  # z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus), 
-  #                                "payback" = min(df_pareto_objectives_normalized$payback))
-  
-  # z_star_z_norm = data.frame("surplus" = min(df_pareto_objectives_z_norm$surplus), 
-  #                            "payback" = min(df_pareto_objectives_z_norm$payback))
-  
-  df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
-  # df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
-  # df_pareto_objectives_z_norm_rank_1 = df_pareto_objectives_z_norm[rank_1, ]
-  
-  # criteria = 0 should never enter here
-  if(criteria == 1) {
-    rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
-  }else if(criteria == 2) {
-    # TODO: fix something with scales between variables
-    rank_1_criteria = calculate_selected_row_criteria_2(df_pareto_objectives_rank_1, z_star)
-    # rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star_normalized)
-    # rank_1_criteria_z_norm = calculate_selected_row_criteria_2(df_pareto_objectives_z_norm_rank_1, z_star_z_norm)
-  }
-  
-  df_pareto_betas = data.frame(optim$parameters)  
-  df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
-  
-  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria, ])
+  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria_normalized,])
   coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
   coefficients = coefficients/rowSums(coefficients)
   
   # objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
   
-  objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria, ]
+  objectives_with_criteria = df_pareto_objectives_rank_1[rank_1_criteria_normalized, ]
   # objectives_with_criteria_normalized = df_pareto_objectives_normalized_rank_1[rank_1_criteria_normalized, ]
   # objectives_with_criteria_z_norm = df_pareto_objectives_rank_1[rank_1_criteria_z_norm, ]
   
@@ -2682,6 +2180,48 @@ choose_scenarios <- function(optim, n_community, n_sunny_hours, criteria, name_p
   
   # objectives_with_criteria_pre_processing = df_pareto_objectives_rank_1_pre_processing[rank_1_criteria, ]
   # plot_multi_objective_criteria_selection(name = paste0("pre_processing_",name_plot), df_pareto_objectives_pre_processing, z_star_pre_processing, objectives_with_criteria_pre_processing)
+  
+  return(coefficients)
+}
+
+
+choose_scenarios_normalized <- function(optim, plot, n_community, n_sunny_hours, criteria, name_plot){
+  
+  df_pareto_objectives = data.frame(optim$objectives)  
+  colnames(df_pareto_objectives) = c("surplus", "payback")
+  rank_1 = (optim$paretoFrontRank == 1)
+  
+  df_pareto_objectives_normalized = apply(df_pareto_objectives, MARGIN = 2, FUN = normalization)
+  df_pareto_objectives_normalized = as.data.frame(df_pareto_objectives_normalized)
+  
+  z_star = data.frame("surplus" = min(df_pareto_objectives$surplus),
+                      "payback" = min(df_pareto_objectives$payback))
+  
+  z_star_normalized = data.frame("surplus" = min(df_pareto_objectives_normalized$surplus),
+                                 "payback" = min(df_pareto_objectives_normalized$payback))
+  
+  df_pareto_objectives_rank_1 = df_pareto_objectives[rank_1, ]
+  df_pareto_objectives_normalized_rank_1 = df_pareto_objectives_normalized[rank_1, ]
+
+  if(criteria == 1) {
+    rank_1_criteria = calculate_selected_row_criteria_1(df_pareto_objectives_rank_1, z_star)
+  }else if(criteria == 2) {
+    # TODO: fix something with scales between variables
+    rank_1_criteria_normalized = calculate_selected_row_criteria_2(df_pareto_objectives_normalized_rank_1, z_star_normalized)
+  }
+  
+  df_pareto_betas = data.frame(optim$parameters)  
+  df_pareto_betas_rank_1 = df_pareto_betas[rank_1, ]
+  
+  betas_with_criteria = as.numeric(df_pareto_betas_rank_1[rank_1_criteria_normalized,])
+  coefficients = matrix(data = betas_with_criteria, ncol = n_community, nrow = n_sunny_hours, byrow = T)
+  coefficients = coefficients/rowSums(coefficients)
+  
+  objectives_with_criteria_normalized = df_pareto_objectives_normalized_rank_1[rank_1_criteria_normalized, ]
+
+  if (plot == T) {
+    plot_multi_objective_criteria_selection(name = name_plot, df_pareto_objectives_normalized, z_star_normalized, objectives_with_criteria_normalized)
+  }
   
   return(coefficients)
 }
@@ -2716,7 +2256,8 @@ optimize_hourly_betas_multi_objective_per_combination <- function(hourly, combin
   
   n_community = sum(combination_selected)
   
-  individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
+  # this should not be calculated here, should be introduced outside
+  # individual_investment_selected = calculate_individual_investment(combination_selected, global_investment, individual_investment_max)
   
   n_sunny_hours = nrow(df_cons_selected_sunny)      
   dim = calculate_dim(hourly, n_community, n_sunny_hours)
@@ -2747,6 +2288,97 @@ calculate_combinatorics = function(n, m){
 }
 
 
+# calculate_matrix_coefficients <- function(method, df_gen, df_cons_selected){
+#   df_gen_assigned <- calculate_gen_assigned(df_gen, combination = rep(1, length(df_cons_selected)))
+#   
+#   optimum_coefficients = df_cons_selected/df_gen_assigned
+#   optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
+#   
+#   matrix_coefficients = as.matrix(optimum_coefficients)
+#   
+#   return(matrix_coefficients)
+# }
+
+calculate_matrix_coefficients <- function(optimizer_number, df_gen_sunny, df_cons_selected_sunny, n_community, individual_investment_selected = 0, df_local_time){
+  
+  matrix_coefficients = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
+  
+  if (optimizer_number == 1){
+    matrix_coefficients[,] = 1/n_community
+    
+  } else if (optimizer_number == 2){
+    # needs individual_investment_selected
+    ratio_investment = as.numeric(individual_investment_selected/sum(individual_investment_selected))
+    matrix_coefficients = matrix(1, nrow = length(df_gen_sunny)) %*% matrix(ratio_investment, ncol = n_community)
+    
+  } else if (optimizer_number == 3){
+    df_gen_assigned_sunny <- calculate_gen_assigned(df_gen_sunny, combination = rep(1, n_community))
+    optimum_coefficients = df_cons_selected_sunny/df_gen_assigned_sunny
+    optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
+    
+    matrix_coefficients = as.matrix(optimum_coefficients)
+  } else if (optimizer_number == 4){
+    calculate_matrix_coefficient_4(df_local_time, df_cons_selected_sunny, df_gen_sunny, df_purchase_price_one_day, n_community, individual_investment_selected)
+  
+  }
+  
+  return(matrix_coefficients)
+}
+
+calculate_matrix_coefficient_4 <- function(df_local_time, df_cons_selected_sunny, df_gen_sunny, df_purchase_price_one_day, n_community, individual_investment_selected){
+  
+  n_sunny_hours_start = 1
+  for (month_i in 1:12) {
+    for (date_i in 1:2) {
+      
+      print(month_i)
+      print(date_i)
+      
+      df_local_time_first_day = df_local_time[df_local_time$month %in% month_i & df_local_time$date %in% date_i, ] 
+      n_sunny_hours = sum(df_local_time_first_day$sunny)
+      
+      df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
+      df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
+      
+      purchase_price_sunny_one_day = df_purchase_price_one_day[df_local_time_first_day$sunny,"price"]
+      
+      dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
+      optim <- nsga2R_flor(fn = purrr::partial(fitness_MO,
+                                               df_gen_sunny = df_gen_sunny_one_day,
+                                               df_cons_selected_sunny = df_cons_selected_sunny_one_day,
+                                               # purchase_price_sunny = purchase_price_sunny,
+                                               purchase_price_sunny = purchase_price_sunny_one_day,
+                                               individual_investment_selected = individual_investment_selected),
+                           varNo = dim,
+                           objDim = 2,
+                           generations = 100,
+                           popSize = 200,
+                           cprob = 0.8,
+                           mprob = 0.2,
+                           lowerBounds = rep(0, dim),
+                           upperBounds = rep(1, dim))
+      
+      matrix_coefficients_month_date = choose_scenarios_normalized(optim, plot = F, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
+      matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
+      
+      n_sunny_hours_start = n_sunny_hours_start + n_sunny_hours 
+    }
+  }
+  
+  return(matrix_coefficients_4)
+}
+
+
+calculate_surplus_hourly_individual_betas <- function(matrix_coefficients, df_gen_day, df_cons_selected_day){
+  
+  df_gen_assigned <- calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
+  individual_hourly_surplus <- df_gen_assigned - df_cons_selected_day
+  individual_hourly_surplus[individual_hourly_surplus < 0] = 0
+  
+  return(individual_hourly_surplus)
+}
+
+
 ############################# AUX - plot #############################
 
 
@@ -2758,4 +2390,13 @@ calculate_solar_consumption <- function(df_gen_assigned, df_cons_selected){
   return(df_solar_consumption)
 }
 
+
+calulate_payback_surplus_for_matrix <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, n_community, purchase_price_sunny, individual_investment_selected){
+  
+  payback = calculate_payback_betas(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients)
+  payback = sum(exp(payback - 0))
+  
+  surplus = sum(calculate_surplus_hourly_individual_betas(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny))
+  return(data.frame("payback" = payback, "surplus" = surplus))
+}
 

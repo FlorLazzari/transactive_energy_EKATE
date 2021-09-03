@@ -1,7 +1,7 @@
 ## select combination and day to study
 
 # import from main_many_users:
-pre_optimal_combinations
+# pre_optimal_combinations
 
 hourly_surplus = apply(X = pre_optimal_combinations, MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny)
 pre_surplus = colSums(hourly_surplus)
@@ -24,139 +24,40 @@ pre_surplus = sum(hourly_surplus)
 
 n_community = sum(combination_selected)
 
-############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
-
-matrix_coefficients_3 = calculate_matrix_coefficients(df_gen_sunny, df_cons_selected_sunny)
-matrix_coefficients_3 = matrix(matrix_coefficients_3, nrow = length(df_gen_sunny), ncol = n_community)
-
-payback_3 = calculate_payback_betas_daily(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients_3)
-payback_3 = sum(exp(payback_3 - 0))
-
-surplus_3 = sum(calculate_surplus_hourly_individual_betas(matrix_coefficients_3, df_gen_sunny, df_cons_selected_sunny))
-
 ############################# OPTIMIZER 1: no optimization of repartition (equitative distribution) #############################
 
-matrix_coefficients_1 = matrix_coefficients_3
-matrix_coefficients_1[,] = 1/n_community
+list_matrix_coefficients = list()
+df_payback_surplus = data.frame("payback" = numeric(), "surplus" = numeric())
 
-payback_1 = calculate_payback_betas_daily(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients_1)
-payback_1 = sum(exp(payback_1 - 0))
+for (optimizer in (1:3)){
+  list_matrix_coefficients[[optimizer]] = calculate_matrix_coefficients(optimizer_number = optimizer, df_gen_sunny, df_cons_selected_sunny, n_community, individual_investment_selected = individual_investment_selected)
+  df_payback_surplus[optimizer, ] = rbind(calulate_payback_surplus_for_matrix(list_matrix_coefficients[[optimizer]], df_gen_sunny, df_cons_selected_sunny, n_community, purchase_price_sunny, individual_investment_selected))
+}
 
-surplus_1 = sum(calculate_surplus_hourly_individual_betas(matrix_coefficients_1, df_gen_sunny, df_cons_selected_sunny))
 
 ############################# OPTIMIZER 2: repartition based on investment #############################
 
-ratio_investment = as.numeric(individual_investment_selected/sum(individual_investment_selected))
-matrix_coefficients_2 = matrix(1, nrow = length(df_gen_sunny)) %*% matrix(ratio_investment, ncol = n_community)
+matrix_coefficients_2 = calculate_matrix_coefficients(optimizer_number = 2, df_gen_sunny, df_cons_selected_sunny, n_community, individual_investment_selected)
+df_payback_surplus_2 = calulate_payback_surplus_for_matrix(matrix_coefficients_2, df_gen_sunny, df_cons_selected_sunny, n_community, purchase_price_sunny, individual_investment_selected) 
 
-payback_2 = calculate_payback_betas_daily(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients_2)
-payback_2 = sum(exp(payback_2 - 0))
+############################# OPTIMIZER 3: repartition based on surplus (preoptimization) #############################
 
-surplus_2 = sum(calculate_surplus_hourly_individual_betas(matrix_coefficients_2, df_gen_sunny, df_cons_selected_sunny))
-
-############################# get together #############################
-
-df_scenarios = data.frame("optimizer" = c(1, 2, 3),
-                          "surplus" = c(surplus_1, surplus_2, surplus_3),
-                          "payback" = c(payback_1, payback_2, payback_3))
+matrix_coefficients_3 = calculate_matrix_coefficients(optimizer_number = 3, df_gen_sunny, df_cons_selected_sunny, n_community)
+calulate_payback_surplus_for_matrix(matrix_coefficients_3, df_gen_sunny, df_cons_selected_sunny, n_community, purchase_price_sunny, individual_investment_selected) 
 
 ############################# OPTIMIZER 4: optimum repartition taking into account the payback #############################
 
 # run optimization for each characteristic the days:
 
 matrix_coefficients_4 = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
-matrix_coefficients_4_normalizing = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
+matrix_coefficients_4_constraint = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
 
-# to check surplus
-n_sunny_hours_start = 1
-for (month_i in 1:12) {
-  for (date_i in 1:2) {
-    
-    print(month_i)
-    print(date_i)
-    # month_i = 1
-    # date_i = 2
-    
-    df_local_time_first_day = df_local_time[df_local_time$month %in% month_i & df_local_time$date %in% date_i, ] 
-    n_sunny_hours = sum(df_local_time_first_day$sunny)
-    
-    df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
-    df_cons_sunny_one_day = df_cons_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
-    df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
-    
-    purchase_price_sunny_one_day = df_purchase_price_one_day[df_local_time_first_day$sunny,"price"]
-    
-    # optimize_hourly_betas_multi_objective_per_combination:
-    dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
-    optim <- nsga2R_flor(fn = purrr::partial(fitness_MO,
-                                             df_gen_sunny = df_gen_sunny_one_day,
-                                             df_cons_selected_sunny = df_cons_selected_sunny_one_day,
-                                             purchase_price_sunny = purchase_price_sunny,
-                                             individual_investment_selected = individual_investment_selected),
-                         varNo = dim,
-                         objDim = 2,
-                         # generations = 100,
-                         generations = 100,
-                         popSize = 200,
-                         cprob = 0.8,
-                         mprob = 0.2,
-                         lowerBounds = rep(0, dim),
-                         upperBounds = rep(1, dim))
-    
-    # criteria 2 = reasonable surplus & payback
-    # TODO: is this working?
-    # work in "selection_according_to_criteria"
-    # matrix_coefficients_month_date = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0("normalization", as.character(month_i),"_",as.character(date_i)))
-    
-    matrix_coefficients_month_date = choose_scenarios(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
-    matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
 
-    ################################################
-    
-    optim <- nsga2R_flor_normalizing(fn = purrr::partial(fitness_MO_normalizing,
-                                                         df_gen_sunny = df_gen_sunny_one_day,
-                                                         df_cons_selected_sunny = df_cons_selected_sunny_one_day,
-                                                         purchase_price_sunny = purchase_price_sunny,
-                                                         individual_investment_selected = individual_investment_selected),
-                                     varNo = dim,
-                                     objDim = 2,
-                                     # generations = 100,
-                                     generations = 100,
-                                     popSize = 200,
-                                     cprob = 0.8,
-                                     mprob = 0.2,
-                                     lowerBounds = rep(0, dim),
-                                     upperBounds = rep(1, dim))
-    
-    # criteria 2 = reasonable surplus & payback
-    # TODO: is this working?
-    # work in "selection_according_to_criteria"
-    # matrix_coefficients_month_date = selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0("normalization", as.character(month_i),"_",as.character(date_i)))
-    
-    matrix_coefficients_month_date = choose_scenarios(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0("optim_normalizing_",as.character(month_i),"_",as.character(date_i)))
-    matrix_coefficients_4_normalizing[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
 
-    ################################################
-        
-    
-    # matrix_coefficients_month_date = choose_scenarios_normalizing(df_scenarios, optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
-    # matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
-
-    n_sunny_hours_start = n_sunny_hours_start + n_sunny_hours 
-  }
-}
-
-# matrix_coefficients_4_original = matrix_coefficients_4
-# matrix_coefficients_4_z_norm = matrix_coefficients_4
-# matrix_coefficients_4_normalization = matrix_coefficients_4
 
 
 ############################# choose the best combination for each optimization #############################
 
-# TODO (possible plot)
-# inside the: 
-# selection_according_to_criteria_2(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
-# add to the plot the results of the optimization 1, 2 & 3
 
 
 ############################# generate plot #############################

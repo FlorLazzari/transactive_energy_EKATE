@@ -49,6 +49,8 @@ import_data_genome_project <- function(selected_year_consumption){
   
   meter = meter[as.Date(meter$time) %in% as.Date(selected_year_consumption), ]
 
+  # df_cons_sunny_desordered = df_cons_sunny[, number_order]
+  
   return(meter)
 }
 
@@ -129,7 +131,6 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
   #   fitness = fitness_1
   # }
   
-  
   dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
   dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
   
@@ -142,8 +143,8 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
                       popSize = dim_search_ga, maxiter = 400, run = 50,
                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
                       keepBest = T,
-                      pmutation = 0.3
-                      )
+                      pmutation = 0.7
+  )
   
   # TODO: understand: popSize should be simmilar to the combinatorial??
   # look for: relation between popSize and dimension of the space (number of possible combinations) 
@@ -164,11 +165,11 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
   # combinatorics counting as different elements to the repeted elements: n! / (n-p)!               CASE1: the search space of the GA 
   # combinatorics without counting as different elements to the repeted elements: n! / p! (n-p)!    CASE2: the useful solutions for us 
   # if p! is big => the differences between combinations_complete and combinations will tend to be bigger 
-
+  
   # the important number is: how many are we loosing by implementig the algo in this way??
   combinations_complete = combinations
   combinations = combinations[!duplicated(combinations), ]
-
+  
   surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons))
   
   surplus_ordered = surplus[order(surplus)]
@@ -182,7 +183,7 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
   combinations_ordered = combinations[order(surplus), ]
   # combinations_ordered_filtered = combinations[surplus_ordered < q_05, ]
   combinations_ordered_filtered = combinations_ordered[1:n_filter, ]
-
+  
   return(combinations_ordered_filtered)
 }
 
@@ -190,6 +191,7 @@ optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
 # TODO: study more about crossovers and elaborate a better one
 bee_uCrossover_binary <- function(object, parents, n_binary_rep, n_community){
   
+  # data = c(ifelse(pracma::rand(n = 1, m = n_binary_rep_box*n_community*2) > 0.5, 1, 0))
   # data = c(1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
   # parents <- matrix(data = data, ncol = n_community*n_binary_rep)
   
@@ -203,10 +205,176 @@ bee_uCrossover_binary <- function(object, parents, n_binary_rep, n_community){
 }
 
 
+# optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize){
+#   
+#   dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+#   dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+#   
+#   dim_search_ga = 600
+#   
+#   optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
+#                       nBits = n_binary_rep*n_community,
+#                       n_community = n_community, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
+#                       # popSize = 100, maxiter = 1000, run = 100)
+#                       popSize = dim_search_ga, maxiter = 400, run = 50,
+#                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+#                       pmutation = 0.7
+#   )
+#   
+#   x_solution = optim_results@solution
+#   
+#   # x_solution = as.vector(unlist(x_solution))
+#   # n_solutions = length(x_solution)/(n_binary_rep * n_community)
+#   # factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
+#   # solutions = t(as.data.frame(split(x = x_solution, f = factor)))
+#   # combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+#   
+#   combinations = t(apply(X = as.matrix(x_solution), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+#   
+#   # the important number is: how many are we loosing by implementig the algo in this way??
+#   combinations_complete = combinations
+#   combinations = combinations[!duplicated(combinations), ]
+#   
+#   # surplus_ordered = surplus[order(surplus)]
+#   # hist(surplus_ordered)
+#   # q_05 = quantile(x = surplus_ordered, probs = 0.5)
+#   # surplus_ordered_filtered = surplus_ordered[surplus_ordered < q_05]
+#   
+#   # n_filter = min(50,length(surplus_ordered))
+#   # surplus_ordered_filtered = surplus_ordered[1:n_filter]
+#   
+#   # combinations_ordered = combinations[order(surplus), ]
+#   # combinations_ordered_filtered = combinations[surplus_ordered < q_05, ]
+#   # combinations_ordered_filtered = combinations_ordered[1:n_filter, ]
+#   
+#   return(combinations)
+# }
+
+
+optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, max_iter){
+  
+  dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  
+  dim_search_ga = 600
+  
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
+                      nBits = n_binary_rep*n_community,
+                      n_community = n_community, df_gen_to_optimize = df_gen_to_optimize, df_cons_to_optimize = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = dim_search_ga, 
+                      # maxiter = 400, run = 50,
+                      maxiter = max_iter,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+                      # keepBest = T,
+                      pmutation = 0.7
+  )
+
+  solutions = optim_results@solution
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+  combinations = combinations[!duplicated(combinations), ]
+  
+  return(combinations)
+}
+
+
+optimization_1_to_analize_convergence <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, max_run){
+  
+  dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  dim_search_ga = 600
+
+  tic = Sys.time()
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
+                      nBits = n_binary_rep*n_community,
+                      n_community = n_community, df_gen_to_optimize = df_gen_to_optimize, df_cons_to_optimize = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = dim_search_ga, 
+                      maxiter = 400, 
+                      run = max_run,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+                      keepBest = T,
+                      pmutation = 0.7
+  )
+  toc = Sys.time()
+  time = toc-tic
+  
+  # solutions = optim_results@solution
+  # combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+  
+  x_solution = optim_results@bestSol
+  x_solution = as.vector(unlist(x_solution))
+  n_solutions = length(x_solution)/(n_binary_rep * n_community)
+  factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
+  solutions = t(as.data.frame(split(x = x_solution, f = factor)))
+  best_combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+  
+  return(list("best_combinations" = best_combinations, "time" = time))
+}
+
+
+optimization_1_boxes <- function(n_community, n_binary_rep_box, list_box_season, df_gen_to_optimize, df_cons_to_optimize){
+  
+  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
+  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
+  # dim_search_solution = factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)
+  
+  dim_search_ga = 600
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas_boxes, 
+                      nBits = n_binary_rep_box*n_community,
+                      n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize,    
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = dim_search_ga, maxiter = 400, run = 20,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep_box, n_community = n_community), 
+                      # keepBest = T,
+                      pmutation = 0.7
+  )
+  
+  # bestSol if keepBest = TRUE, the best solutions at each iteration
+  # keeps the 50 best solutions for every iteration
+  # without using keepBest then I only see the 50 best for the last iteration
+  
+  solutions = optim_results@solution
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary_boxes, n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons_to_optimize))
+  
+  return(combinations)
+}
+
+
+optimization_1_boxes_to_analize_convergence <- function(n_community, n_binary_rep_box, list_box_season, df_gen_to_optimize, df_cons_to_optimize){
+  
+  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
+  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
+  # dim_search_solution = factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)
+  
+  dim_search_ga = 600
+  optim_results <- ga(type = "binary", fitness = fitness_1_betas_boxes, 
+                      nBits = n_binary_rep_box*n_community,
+                      n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize,    
+                      # popSize = 100, maxiter = 1000, run = 100)
+                      popSize = dim_search_ga, maxiter = 400, run = 20,
+                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep_box, n_community = n_community), 
+                      keepBest = T,
+                      pmutation = 0.7
+  )
+  
+  # bestSol if keepBest = TRUE, the best solutions at each iteration
+  # keeps the 50 best solutions for every iteration
+  # without using keepBest then I only see the 50 best for the last iteration
+  solutions = optim_results@bestSol
+  solutions = data.frame(matrix(unlist(solutions), nrow=length(solutions), byrow=TRUE))
+  
+  # solutions = optim_results@solution
+  best_combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary_boxes, n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons))
+  
+  return(best_combinations)
+}
+
+
 nsga2R_flor <- function (fn, varNo, objDim, lowerBounds = rep(-Inf, varNo), 
-          upperBounds = rep(Inf, varNo), popSize = 100, tourSize = 2, 
-          generations = 20, cprob = 0.7, XoverDistIdx = 5, mprob = 0.2, 
-          MuDistIdx = 10){
+                         upperBounds = rep(Inf, varNo), popSize = 100, tourSize = 2, 
+                         generations = 20, cprob = 0.7, XoverDistIdx = 5, mprob = 0.2, 
+                         MuDistIdx = 10){
   cat("********** R based Nondominated Sorting Genetic Algorithm II *********")
   cat("\n")
   # cat("initializing the population")
@@ -318,7 +486,7 @@ normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
 
 
 # IMPORTANT: 
-# the nsga2R_flor_normalizing gets worst results than the nsga2R_flor 
+# the nsga2R_flor_constraint gets worst results than the nsga2R_flor 
 
 # changed all these variables:
 # fn = purrr::partial(fitness_MO_constraint,
@@ -344,19 +512,19 @@ normalize_genome <- function(genome, n_community, n_sunny_hours, dim, popSize){
 # upperBounds = rep(1, dim)
 
 nsga2R_flor_constraint <- function (fn = fitness_MO_constraint, 
-                             varNo = 5, 
-                             objDim = 2, 
-                             lowerBounds = rep(0, varNo), 
-                             upperBounds = rep(10, varNo), 
-                             popSize = 20, 
-                             tourSize = 2, 
-                             generations = 10, 
-                             cprob = 0.7, 
-                             XoverDistIdx = 5, 
-                             mprob = 0.2,
-                             MuDistIdx = 10){
-
-
+                                    varNo = 5, 
+                                    objDim = 2, 
+                                    lowerBounds = rep(0, varNo), 
+                                    upperBounds = rep(10, varNo), 
+                                    popSize = 20, 
+                                    tourSize = 2, 
+                                    generations = 10, 
+                                    cprob = 0.7, 
+                                    XoverDistIdx = 5, 
+                                    mprob = 0.2,
+                                    MuDistIdx = 10){
+  
+  
   cat("********** R based Nondominated Sorting Genetic Algorithm II *********")
   cat("\n")
   # cat("initializing the population")
@@ -456,12 +624,12 @@ nsga2R_flor_constraint <- function (fn = fitness_MO_constraint,
                                                                                             1):(varNo + objDim)], 2, min)
     cd <- crowdingDist4frnt(parentNext, ranking, objRange)
     parentNext <- cbind(parentNext, apply(cd, 1, sum))
-      parentNext.sort <- parentNext[order(parentNext[, varNo + 
-                                                       objDim + 1], -parentNext[, varNo + objDim + 2]), 
-                                    ]
-      # cat("environmental selection")
-      # cat("\n")
-      parent <- parentNext.sort[1:popSize, ]
+    parentNext.sort <- parentNext[order(parentNext[, varNo + 
+                                                     objDim + 1], -parentNext[, varNo + objDim + 2]), 
+                                  ]
+    # cat("environmental selection")
+    # cat("\n")
+    parent <- parentNext.sort[1:popSize, ]
     # cat("---------------generation---------------", iter, 
     #     "ends")
     # cat("\n")
@@ -490,16 +658,82 @@ nsga2R_flor_constraint <- function (fn = fitness_MO_constraint,
 }
 
 
+calculate_matrix_coefficient_4_one_year <- function (df_local_time, df_cons_selected_sunny, df_gen_sunny, df_purchase_price_one_day, n_community, individual_investment_selected){
+  
+  matrix_coefficients_4 = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
+  
+  n_sunny_hours_start = 1
+  for (month_i in 1:12) {
+    for (date_i in 1:2) {
+      
+      print(month_i)
+      print(date_i)
+      
+      df_local_time_first_day = df_local_time[df_local_time$month %in% month_i & df_local_time$date %in% date_i, ] 
+      n_sunny_hours = sum(df_local_time_first_day$sunny)
+      
+      df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
+      df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
+      
+      purchase_price_sunny_one_day = df_purchase_price_one_day[df_local_time_first_day$sunny,"price"]
+      
+      # optimize_hourly_betas_multi_objective_per_combination:
+      dim = calculate_dim(hourly=T, n_community, n_sunny_hours)
+      optim <- nsga2R_flor(fn = purrr::partial(fitness_MO,
+                                               df_gen_sunny = df_gen_sunny_one_day,
+                                               df_cons_selected_sunny = df_cons_selected_sunny_one_day,
+                                               purchase_price_sunny = purchase_price_sunny_one_day,
+                                               individual_investment_selected = individual_investment_selected),
+                           varNo = dim,
+                           objDim = 2,
+                           # generations = 100,
+                           generations = 100,
+                           popSize = 200,
+                           cprob = 0.8,
+                           mprob = 0.2,
+                           lowerBounds = rep(0, dim),
+                           upperBounds = rep(1, dim))
+      
+      matrix_coefficients_month_date = choose_scenarios(optim, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
+      matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
+      
+      n_sunny_hours_start = n_sunny_hours_start + n_sunny_hours 
+    }
+  }
+  return(matrix_coefficients_4)
+}
+
+
 ############################# fitness #############################
 
 
-fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
+fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize){
   
   # tests -> lower number, bigger number:
   # x = rep(0, n_binary_rep*n_community)
   # x = rep(1, n_binary_rep*n_community)
+  # x = x_solution[1, ]
+
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize)
+  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
+
+  # surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
+  score <- surplus
   
-  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons)
+  # surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
+  
+  return(-score)
+}
+
+
+fitness_1_betas_boxes <- function(x, n_community, n_binary_rep_box, list_box_season, df_gen, df_cons){
+  
+  # tests -> lower number, bigger number:
+  # x = rep(0, n_binary_rep_box*n_community)
+  # x = rep(1, n_binary_rep_box*n_community)
+  # x = c(ifelse(pracma::rand(n = 1, m = n_binary_rep_box*n_community) > 0.5, 1, 0))
+  
+  combination = calculate_combination_for_GA_binary_boxes(x = x, n_community = n_community, n_binary_rep = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons)
   
   surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen, df_cons = df_cons))
   score <- surplus
@@ -507,15 +741,33 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen, df_cons){
   return(-score)
 }
 
+
+calculate_combination_for_GA_binary_boxes <- function(x, n_community, n_binary_rep_box, list_box_season, df_cons){
+  
+  combination = rep(0, ncol(df_cons))
+  
+  # TODO: change this so it doesnt have to check inside the boxes:
+  for (j in 1:n_community) {
+    # j = 1
+    binary_user_inside_box = GA::gray2binary(x[((j-1)*n_binary_rep_box + 1):(j*n_binary_rep_box)])   
+    user_inside_box = GA::binary2decimal(binary_user_inside_box) + 1
+    user = list_box_season[[j]][user_inside_box] 
+    user_number = as.numeric(gsub(x = user, pattern = "cons_", replacement = ""))
+    combination[user_number] = 1
+  }
+  return(combination)
+}
+
+
 # TODO: change by purchase_price_sunny everywhere!
 fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
-
+  
   # checking:
   # fitness_MO(runif(dim, 0, 1),
   #            df_gen_day = df_gen_day,
   #            df_cons_selected_day = df_cons_selected_day,
   #            individual_investment_selected = individual_investment_selected)
-
+  
   # fn: the fitness function to be minimized
   # varNo: Number of decision variables
   # objDim: Number of objective functions
@@ -525,7 +777,7 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   # generations: Number of generations
   # cprob: crossover prob
   # mprob: mutation prob
-
+  
   # x = runif(dim, 0, 1)
   
   n_sunny_hours = nrow(df_cons_selected_sunny)
@@ -551,12 +803,12 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   sale_price = 0.0508
   
   cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
-
+  
   grid_x = df_cons_selected_sunny - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
-
+  
   # changed this: 
   # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
   cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
@@ -711,14 +963,14 @@ fitness_MO_constraint <- function(x, df_gen_sunny, df_cons_selected_sunny, purch
   # generations: Number of generations
   # cprob: crossover prob
   # mprob: mutation prob
-
+  
   # x = runif(dim, 0, 1)
   
   n_sunny_hours = nrow(df_cons_selected_sunny)
   n_community = ncol(df_cons_selected_sunny)
   
   coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-
+  
   df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
   
   # checking:
@@ -846,7 +1098,7 @@ plot_solar_consumption_daily_mean_betas <- function(name, df_gen, df_gen_assigne
   m = unique(month(df_local_time$time))
   
   df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users)
-
+  
   df_gen$hour = df_local_time$hour
   df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
   
@@ -875,7 +1127,7 @@ plot_disaggregated_daily_mean_per_user_betas <- function(df_gen_assigned, df_con
   
   # calculate solar consumption and surplus
   df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users_sunny)
-
+  
   solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
   solar_surplus[solar_surplus < 0] = 0
   
@@ -985,6 +1237,199 @@ plot_disaggregated_daily_mean_community_betas <- function(name, df_gen_assigned,
   
   df_gen_assigned$hour = df_local_time$hour[df_local_time$sunny]
   df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
+  
+  ##
+  
+  solar_consumption_mean_community <- rowSums(solar_consumption_mean[, 2:(n_community+1)])
+  grid_mean_community <- rowSums(grid_mean[, 2:(n_community+1)])  
+  solar_surplus_mean_community <- rowSums(solar_surplus_mean[, 2:(n_community+1)])  
+  
+  df_plot <- data.frame("hour" =  df_local_time$hour,
+                        "Solar_surplus" = solar_surplus_mean_community,
+                        "Solar_consumption" = solar_consumption_mean_community,
+                        "Grid_consumption" = grid_mean_community
+  )
+  
+  df_plot = melt(df_plot, id.vars = "hour")
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  
+  surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  index_order = order(colSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  
+  # how can I automatize this??
+  if (n_community == 2) {
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 3){
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 4){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 5){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)),fill = "")  
+  }else if (n_community == 6){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 7){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 8){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 9){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 10){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else if (n_community == 11){ 
+    p <- ggplot() +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]])) +
+      geom_line(aes(x = df_cons_selected_mean[, "hour"], y = df_cons_selected_mean[, 1+index_order[1]] + df_cons_selected_mean[,1+index_order[2]] + df_cons_selected_mean[,1+index_order[3]]  + df_cons_selected_mean[,1+index_order[4]] + df_cons_selected_mean[,1+index_order[5]] + df_cons_selected_mean[,1+index_order[6]] + df_cons_selected_mean[,1+index_order[7]] + df_cons_selected_mean[,1+index_order[8]] + df_cons_selected_mean[,1+index_order[9]] + df_cons_selected_mean[,1+index_order[10]] + df_cons_selected_mean[,1+index_order[11]])) +
+      geom_area(aes(x = df_plot[, "hour"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+      # grids() + 
+      labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  }else{ 
+    print("n_community != 2:9")
+  }
+  ggsave(filename = paste0("graphs/community_",name), plot = p, device = "pdf", width = 5, height = 3)
+  return()
+}
+
+
+plot_disaggregated_daily_mean_community_betas_yearly_weekdays <- function(name, df_gen_assigned, df_cons_selected_users, df_local_time){
+  
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # # add hour column
+  # df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+  # solar_surplus$hour = df_local_time$hour[df_local_time$sunny]
+  # grid$hour = df_local_time$hour[df_local_time$sunny]
+  # df_cons_selected_users$hour = df_local_time$hour
+  
+  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$hour %in% grid$hour,])
+  
+  df_aux = df_cons_selected_users[!df_cons_selected_users$hour %in% df_solar_consumption$hour,] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  # aggregate
+  # solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  # solar_surplus_mean = aggregate(x = solar_surplus, by = list(solar_surplus$hour), FUN = mean) 
+  # grid_mean = aggregate(x = grid, by = list(grid$hour), FUN = mean) 
+  
+  # to calculate the self consumption and surplus 
+  # df_cons_selected_users$hour = df_local_time$hour
+  # df_cons_selected_mean = aggregate(x = df_cons_selected_users, by = list(df_cons_selected_users$hour), FUN = mean) 
+  
+  n_community = ncol(df_gen_assigned)
+  
+  # df_gen_assigned$hour = df_local_time$hour[df_local_time$sunny]
+  # df_gen_assigned_mean = aggregate(x = df_gen_assigned, by = list(df_gen_assigned$hour), FUN = mean)
   
   ##
   
@@ -1404,7 +1849,7 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
   df_costs_comparison[,] = 0
   df_costs_comparison = df_costs_comparison[1:length(matrix_coefficients_list),]
   df_costs_comparison$i_matrix = 0
-
+  
   df_solar_surplus_comparison = df_cons_selected 
   df_solar_surplus_comparison[,] = 0
   df_solar_surplus_comparison = df_solar_surplus_comparison[1:length(matrix_coefficients_list),]
@@ -1414,10 +1859,10 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
   df_payback_years_comparison[,] = 0
   df_payback_years_comparison = df_payback_years_comparison[1:length(matrix_coefficients_list),]
   df_payback_years_comparison$i_matrix = 0
-
+  
   cost_old = colSums(purchase_price*df_cons_selected)
   cost_old_one_year = cost_old * 360
-
+  
   for (i in 1:length(matrix_coefficients_list)) {
     
     matrix_coefficients = matrix_coefficients_list[[i]]
@@ -1427,27 +1872,27 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
     
     solar_surplus <- df_gen_assigned - df_cons_selected_sunny
     solar_surplus[solar_surplus < 0] = 0
-
+    
     grid = df_cons_selected_sunny - df_gen_assigned
     grid[grid < 0] = 0
-
+    
     df_cons_selected$hour = df_local_time$hour
     
     grid$hour = df_local_time$hour[df_local_time$sunny]
     grid = rbind(grid, df_cons_selected[!df_cons_selected$hour %in% grid$hour,])
-
+    
     df_cons_selected = df_cons_selected[, -ncol(df_cons_selected)]
     grid = grid[, -ncol(grid)]
-
+    
     solar_surplus_to_sell = ifelse(colSums(solar_surplus) < colSums(grid), colSums(solar_surplus), colSums(grid))
-
+    
     cost_sun = purchase_price*colSums(grid) - sale_price * solar_surplus_to_sell
     cost_sun_one_year = cost_sun * 360 
     cost_sun_20_years = cost_sun_one_year * 20
-
+    
     df_costs_comparison[i, ] = c(cost_sun_20_years, i) 
     df_solar_surplus_comparison[i, ] = c(colSums(solar_surplus), i)
-
+    
     profit_period = cost_old - cost_sun
     profit_one_year = profit_period * 360 
     
@@ -1456,7 +1901,7 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
     # TODO: for the case where there is no PV installation (coeff = 0) if I keep payback = 100000 as in the cost function then the plot only shows this value
     df_payback_years_comparison[i, df_payback_years_comparison[i, ] > 10**13] = NA 
   }
-
+  
   costs_comparison = melt(data = df_costs_comparison, id.vars = "i_matrix") 
   costs_comparison$i_matrix = factor(costs_comparison$i_matrix)
   
@@ -1464,55 +1909,55 @@ plot_comparison_coefficients_upgraded <- function(df_gen, df_gen_sunny, df_cons_
     geom_bar(aes(x = costs_comparison$variable,  y = costs_comparison$value, fill = costs_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/costs_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
   
-
+  
   surplus_comparison = melt(data = df_solar_surplus_comparison, id.vars = "i_matrix") 
   surplus_comparison$i_matrix = factor(df_solar_surplus_comparison$i_matrix)
-
+  
   p <- ggplot() +
     geom_bar(aes(x = surplus_comparison$variable,  y = surplus_comparison$value, fill = surplus_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/surplus_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   ##
-
+  
   costs_comparison_aggregated = data.frame("i_matrix" = df_costs_comparison$i_matrix, "value" =rowSums(df_costs_comparison[, -ncol(df_costs_comparison)]))
   costs_comparison_aggregated$i_matrix = factor(costs_comparison_aggregated$i_matrix)
   p <- ggplot() +
     geom_bar(aes(x = costs_comparison_aggregated$i_matrix, y = costs_comparison_aggregated$value, fill = costs_comparison_aggregated$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/costs_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   surplus_comparison_aggregated = data.frame("i_matrix" = df_solar_surplus_comparison$i_matrix, "value" =rowSums(df_solar_surplus_comparison[, -ncol(df_solar_surplus_comparison)]))
   surplus_comparison_aggregated$i_matrix = factor(surplus_comparison_aggregated$i_matrix)
   p <- ggplot() +
     geom_bar(aes(x = surplus_comparison_aggregated$i_matrix, y = surplus_comparison_aggregated$value, fill = costs_comparison_aggregated$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/surplus_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   ## the costs comparison aggregated is almost the same for all the scenarios
-
+  
   investment_comparison = data.frame("i_matrix" = df_costs_comparison$i_matrix, "value" = individual_investment_selected)
   investment_comparison$i_matrix = factor(investment_comparison$i_matrix)
   p <- ggplot() +
     geom_bar(aes(x = investment_comparison$i_matrix, y = investment_comparison$value, fill = investment_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7))
   ggsave(filename = paste0("graphs/individual_investment_comparison"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   ##
-
+  
   payback_comparison = melt(data = df_payback_years_comparison, id.vars = "i_matrix") 
   payback_comparison$i_matrix = factor(df_payback_years_comparison$i_matrix)
   
   p <- ggplot() +
     geom_bar(aes(x = payback_comparison$variable,  y = payback_comparison$value, fill = payback_comparison$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/payback_comparison_disaggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   ##
-
+  
   payback_ideal = 0
   payback_comparison_exp = data.frame("i_matrix" = df_payback_years_comparison$i_matrix, "value" = rowSums(exp(df_payback_years_comparison[, -ncol(df_payback_years_comparison)] - payback_ideal)))
   payback_comparison_exp$i_matrix = factor(payback_comparison_exp$i_matrix)
-
+  
   p <- ggplot() +
     geom_bar(aes(x = payback_comparison_exp$i_matrix, y = payback_comparison_exp$value, fill = payback_comparison_exp$i_matrix), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) 
   ggsave(filename = paste0("graphs/payback_comparison_aggregated"), plot = p, device = "pdf", width = 8, height = 3)
-
+  
   return()
 }
 
@@ -1647,15 +2092,15 @@ plot_multi_objective_criteria_selection <- function(name, df_pareto_objectives, 
   theta = seq(from = 0, to = (2*pi), length.out = 100)
   x_circular = z_star$surplus + r * cos(theta)
   y_circular = z_star$payback + r * sin(theta)
-
+  
   p = ggplot() +
     geom_point(aes(x = df_pareto_objectives$surplus, y = df_pareto_objectives$payback)) +
     geom_point(aes(x = z_star$surplus, y = z_star$payback), shape = 4) +
     # geom_line(aes(x = x_lineal, y = y_lineal)) +
     geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
-    # geom_point(aes(x = x_circular, y = y_circular))
+  # geom_point(aes(x = x_circular, y = y_circular))
   ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p, width = 6, height = 3)
-
+  
   return(p)
 }
 
@@ -1674,13 +2119,13 @@ plot_multi_objective_criteria_selection_scenarios <- function(name, df_scenarios
     geom_point(aes(x = df_scenarios$surplus[1], y = df_scenarios$payback[1]), shape = 1) +
     geom_point(aes(x = df_scenarios$surplus[2], y = df_scenarios$payback[2]), shape = 2) +
     geom_point(aes(x = df_scenarios$surplus[3], y = df_scenarios$payback[3]), shape = 3) 
-        # geom_line(aes(x = x_lineal, y = y_lineal)) +
-    # geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
+  # geom_line(aes(x = x_lineal, y = y_lineal)) +
+  # geom_point(aes(x = objectives_with_criteria$surplus, y = objectives_with_criteria$payback), shape = 5, size = 3) 
   # geom_point(aes(x = x_circular, y = y_circular))
   print(df_scenarios$surplus[1], df_scenarios$payback[1])
   print(df_scenarios$surplus[2], df_scenarios$payback[2])
   print(df_scenarios$surplus[3], df_scenarios$payback[3])
-
+  
   ggsave(filename = paste0("graphs/multi_objective_criteria_",name,".pdf"), plot = p, width = 6, height = 3)
   
   return(p)
@@ -1706,15 +2151,15 @@ plot_matrix <- function(name, matrix_coefficients = matrix_coefficients_list[[3]
 
 
 plot_tariff_signal <- function(){
-
+  
   purchase_price = c(0.14859, 0.14859, 0.14859,  0.14859, 0.14859, 0.14859, 0.14859, 0.14859,   
                      0.14859*1.2, 0.14859*1.2, 
                      0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5,
                      0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
                      0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5,
                      0.14859*1.2, 0.14859*1.2
-                     ) 
-
+  ) 
+  
   p <- ggplot() + 
     geom_line(aes(x=0:23, y=purchase_price)) +
     labs(x="daytime", y="", title="") +
@@ -1726,6 +2171,267 @@ plot_tariff_signal <- function(){
 }
 
 
+plot_planning <- function(name_file, list_box_season_ordered, df_cons_ordered_selected, df_gen, df_local_time){
+  
+  
+  
+  user_number = as.numeric(gsub(x = colnames(df_cons_ordered_selected), pattern = "cons_", replacement = ""))
+  season_types = c("summer_1.1", "summer_1.2", "summer_1.3", "summer_1.4", "summer_1.5", "summer_2", "mid_season_1", "mid_season_2", "winter_1", "winter_2")  
+  
+  paste(season_types, user_number%%8, sep = "_")
+  
+  
+  df_plot <- data.frame("season" = df_local_time$season,
+                        "month" = df_local_time$month,
+                        "date" = df_local_time$date, 
+                        "hour" = df_local_time$hour, 
+                        "time" = 1:nrow(df_local_time),
+                        "generation" = df_gen$energy 
+  )
+  
+  df_plot = cbind(df_plot, df_cons_ordered_selected)
+  
+  seasons = c("summer", "mid_season", "winter")
+  days = c(1, 2)
+  
+  for (season in seasons) {
+    # season = "summer"
+    for (day in days) {
+      # day = 1
+      # list_users[[paste0(season, day)]]
+      
+      users = grepl(pattern = paste(season, day, sep = "_"), x = names(list_box_season_ordered))  
+      
+      df_plot_selected = df_plot[df_plot$season == season & df_plot$date == day, c(grep("cons|generation|time", colnames(df_plot)))]
+      
+      df_plot_selected_important_users = df_plot_selected[, c(T, F, users)] 
+      df_plot_selected_redundant_users = df_plot_selected[, c(T, F, !users)]
+      
+      df_plot_selected_important_users = melt(data = df_plot_selected_important_users, id.vars = "time", variable.name = "series")
+      df_plot_selected_redundant_users = melt(data = df_plot_selected_redundant_users, id.vars = "time", variable.name = "series")
+      
+      p <- ggplot() + 
+        geom_line(aes(df_plot_selected$time, df_plot_selected$generation)) + 
+        geom_line(aes(df_plot_selected_important_users$time, df_plot_selected_important_users$value, color = df_plot_selected_important_users$series)) + 
+        geom_line(aes(df_plot_selected_redundant_users$time, df_plot_selected_redundant_users$value, color = df_plot_selected_redundant_users$series), linetype = 2)
+      ggsave(filename = paste0(name_file, "planning_",season, day) , plot = p, device = "pdf", width = 7, height = 3)
+      
+    }
+  }
+  
+  return()
+}
+
+
+plot_iterations_convergence <- function(name, best_combinations){
+
+  nrow(best_combinations)
+  # sum(!duplicated(best_combinations))
+  
+  # TODO: solve this problem
+  
+  surplus = colSums(apply(X = as.matrix(best_combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_sunny, df_cons = df_cons_sunny))
+  cheating = surplus < 1000  
+  surplus = surplus[cheating]
+  # apply(X = names(surplus), MARGIN = 1, FUN = function(X){strsplit(X, split = "X")})
+  
+  p = ggplot() + 
+    geom_line(aes(x = 1:length(surplus), y = log(surplus))) + 
+    labs(x = "Iteration", y = "Log(surplus)")  
+  
+  ggsave(filename = paste0("graphs/convergence_",name), plot = p, device = "pdf", width = 6, height = 3)  
+  
+  return()
+}
+
+
+plot_table_convergence <- function(name, table_combination_ordered){
+  
+  p <- ggplot() +
+    geom_bar(aes(x = names(table_combination_ordered), y = table_combination_ordered), alpha = 0.5, width = 0.8, stat = "identity")   
+
+  ggsave(filename = paste0("graphs/convergence_analysis_",name), plot = p, device = "pdf", width = 6, height = 3)
+  return()
+}
+
+
+plot_disaggregated_community_betas_year_lines <- function(name, df_gen_assigned, df_cons_selected_users, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # # add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$time %in% grid$time,])
+  
+  df_aux = df_cons_selected_users[!df_cons_selected_users$time %in% df_solar_consumption$time,] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot <- data.frame("time" = df_local_time$time,
+                        "Solar_surplus" = solar_surplus,
+                        "Solar_consumption" = df_solar_consumption,
+                        "Grid_consumption" = grid
+  )
+  
+  
+  df_plot = melt(df_plot, id.vars = "time")
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  
+  surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  index_order = order(colSums(df_cons_selected_users[, 1:n_community]))
+  
+  # how can I automatize this??
+  # }else if (n_community == 7){ 
+  p <- ggplot() +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[,index_order[2]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[, index_order[2]] + df_cons_selected_users[, index_order[3]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[, index_order[2]] + df_cons_selected_users[, index_order[3]]  + df_cons_selected_users[, index_order[4]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[, index_order[2]] + df_cons_selected_users[, index_order[3]]  + df_cons_selected_users[, index_order[4]] + df_cons_selected_users[, index_order[5]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[, index_order[2]] + df_cons_selected_users[, index_order[3]]  + df_cons_selected_users[, index_order[4]] + df_cons_selected_users[, index_order[5]] + df_cons_selected_users[, index_order[6]])) +
+    geom_line(aes(x = df_cons_selected_users[, "time"], y = df_cons_selected_users[, index_order[1]] + df_cons_selected_users[, index_order[2]] + df_cons_selected_users[, index_order[3]]  + df_cons_selected_users[, index_order[4]] + df_cons_selected_users[, index_order[5]] + df_cons_selected_users[, index_order[6]] + df_cons_selected_users[, index_order[7]])) +
+    geom_area(aes(x = df_plot[, "time"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) 
+  
+  p <- ggplot() +
+    geom_area(aes(x = df_plot[, "time"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) 
+  
+  # grids() + 
+  # labs(x = "Time [h]", y = "Energy [kWh]", title = paste0("surplus = ", round(surplus_percentage_mean, digits = 2), ", max_self_cons = ", round(self_consumption_percentage_max, digits = 2)), fill = "")  
+  # ggsave(filename = paste0("graphs/community_",name), plot = p, device = "pdf", width = 5, height = 3)
+  return()
+}
+
+
+plot_disaggregated_community_betas_year_area <- function(name, df_gen_assigned, df_cons_selected_users, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  # # add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$time %in% grid$time,])
+  
+  df_aux = df_cons_selected_users[!df_cons_selected_users$time %in% df_solar_consumption$time,] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot <- data.frame("time" = df_local_time$time,
+                        "Solar_surplus" = solar_surplus,
+                        "Solar_consumption" = df_solar_consumption,
+                        "Grid_consumption" = grid
+  )
+  
+  
+  df_plot = melt(df_plot, id.vars = "time")
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  index_order = order(colSums(df_cons_selected_users[, 1:n_community]))
+  p <- ggplot() +
+    geom_area(aes(x = df_plot[, "time"], y = df_plot[, "value"], fill = df_plot[,"variable"]), alpha = 0.5) +
+    grids() +
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
+  
+  ggsave(filename = paste0("graphs/community_",name), plot = p, device = "pdf", width = 5, height = 3)
+
+  return()
+}
+
+
+plot_simple_users <- function(){
+  
+  week_days = df_local_time$date == 2
+  
+  df_local_time_sunny = df_local_time[df_local_time$sunny == T, ]
+  week_days_of_sunny = which(df_local_time_sunny$date ==2)
+  
+  df_cons_to_plot =  df_cons_sunny_test[week_days_of_sunny, combinations==1]
+  
+  df_local_time_week = df_local_time[week_days, ]
+  df_local_time_week$time = 1:nrow(df_local_time_week)
+  
+  df_cons_to_plot$hour =  df_local_time_week$time[df_local_time_week$sunny == T]
+  df_cons_to_plot = melt(data = df_cons_to_plot, id.vars = "hour")
+
+  # TODO: should not complete the lines in between
+  ggplot(df_cons_to_plot) +  
+    geom_point(aes(x = hour, y = value)) + facet_grid(variable ~ .)
+  
+}
+
+
 ############################# AUX - main #############################
 
 
@@ -1733,7 +2439,7 @@ calculate_n_community_max <- function(generation, consumption){
   
   # minimum self consumption: 0.2?
   
-  # TODO: a some small problem when the peak is a platau
+  # TODO: a small problem when the peak is a platau
   
   # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
   # max_insolation_hours = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = which.max)
@@ -1747,7 +2453,7 @@ calculate_n_community_max <- function(generation, consumption){
   
   # completing borders:
   peak_insolation_hours = c(T, peak_insolation_hours, T)
-  max_insolation_hours = peak_insolation_hours & high_insolation_hours
+    max_insolation_hours = peak_insolation_hours & high_insolation_hours
   
   # checking:
   # peaks = generation
@@ -1755,9 +2461,10 @@ calculate_n_community_max <- function(generation, consumption){
   # plot(generation, type = "l")
   # points(peaks)
   
-  n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
+  # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
+  n_community_mean = floor(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
   
-  return(n_community_max)
+  return(n_community_mean)
 }
 
 
@@ -1843,6 +2550,121 @@ calculate_characteristic_days <- function(df, number_selected_year){
 }
 
 
+define_boxes <- function(df_cons, df_gen, df_local_time, n_community){
+  
+  summer_months = c(7, 8, 9)
+  winter_months = c(1, 2, 3)
+  mid_season_months = c(4, 5, 6, 10, 11, 12)
+  list_season = list("summer" = summer_months, "mid_season" = mid_season_months, "winter" = winter_months)
+  list_n_season_days = list("summer" = c(rep(x = 1, times = n_community-6), 2), "mid_season" = c(1, 1, 2), "winter" = c(1, 2))
+  
+  df_cons_to_remove = df_cons
+  list_box_season = list()
+  
+  
+  # TODO IMPORTANT
+  # instead of filling:
+  # first ALL the summer, 
+  # then ALL the mid_season, 
+  # end ALL the winter
+  
+  # I will try filling:
+  # the FIRST for the summer, 
+  # then the FIRST for the mid_season, 
+  # then the FIRST for the winter,
+  # ...
+  # then the SECOND for the summmer, ....
+  
+  # using this method Im not priorizong soo much the summer users
+
+  
+  
+  i = 1
+  for (season in names(list_season)) {
+    # season = "summer"
+    months = list_season[[season]]
+    
+    # for the generation the mean will consider ALL THE DAYS in the season
+    df_gen_selected = as.data.frame(df_gen[df_local_time$month %in% months, "energy"])
+    df_gen_selected = aggregate(x = df_gen_selected, by = list(rep(0:23, length(months)*2)), FUN = mean)
+    df_gen_selected_complete = df_gen_selected[,2:ncol(df_gen_selected)]
+    df_gen_selected = df_gen_selected_complete[df_gen_selected_complete != 0]
+    df_gen_selected_norm = df_gen_selected/sum(df_gen_selected)
+    
+    n_season_days = list_n_season_days[[season]]
+    
+    for (day in n_season_days) {
+      # day = 1
+      
+      df_cons_selected = df_cons_to_remove[df_local_time$month %in% months & df_local_time$date %in% day, ]
+      df_cons_selected = aggregate(x = df_cons_selected, by = list(rep(0:23, length(months))), FUN = mean)
+      df_cons_selected = df_cons_selected[,2:ncol(df_cons_selected)]
+      df_cons_selected = df_cons_selected[df_gen_selected_complete != 0, ]
+      df_cons_selected_norm = apply(X = df_cons_selected, MARGIN = 2, FUN = function(x){x/sum(x)})
+      
+      # df_gen_selected = as.matrix(df_gen_selected) %*% matrix(data = 1, nrow = 1, ncol = ncol(df_cons_selected))
+      distance <- pracma::distmat(X = t(df_cons_selected_norm), Y = df_gen_selected_norm)
+      
+      # checking:
+      # df_cons_selected_1 = df_cons_selected[, order(distance)[1]]
+      # ggplot() + 
+      #   geom_point(aes(x = 1:length(df_cons_selected_1), y = df_cons_selected_1)) +
+      #   geom_point(aes(x = 1:length(df_gen_selected), y = df_gen_selected), color = "green")
+      
+      selected_users = order(distance)[1:8]
+      mean_cons_order = order(colMeans(df_cons_selected[, selected_users]), decreasing = T)
+      
+      box_season_to_remove = selected_users[mean_cons_order]
+      box_season_to_save = colnames(df_cons_to_remove)[box_season_to_remove]
+      
+      list_box_season[[paste(i, paste(season, day, sep = "_"), sep = ".")]] = box_season_to_save
+      
+      df_cons_to_remove = df_cons_to_remove[, -box_season_to_remove]
+      i = i + 1
+    }
+  }
+  
+  return(list_box_season)
+}
+
+
+define_smart_order <- function(df_cons, df_gen, df_local_time, n_community){
+  
+  df_gen_sunny = df_gen[df_local_time$sunny, "energy"]
+  df_cons_sunny = df_cons_sunny
+
+  # df_gen_selected = as.data.frame(df_gen[df_local_time$month %in% months, "energy"])
+  # df_gen_selected = aggregate(x = df_gen_selected, by = list(rep(0:23, length(months)*2)), FUN = mean)
+  # df_gen_selected_complete = df_gen_selected[,2:ncol(df_gen_selected)]
+  # df_gen_selected = df_gen_selected_complete[df_gen_selected_complete != 0]
+  # df_gen_selected_norm = df_gen_selected/sum(df_gen_selected)
+  # 
+  # df_cons_selected = df_cons_to_remove[df_local_time$month %in% months & df_local_time$date %in% day, ]
+  # df_cons_selected = aggregate(x = df_cons_selected, by = list(rep(0:23, length(months))), FUN = mean)
+  # df_cons_selected = df_cons_selected[,2:ncol(df_cons_selected)]
+  # df_cons_selected = df_cons_selected[df_gen_selected_complete != 0, ]
+  # df_cons_selected_norm = apply(X = df_cons_selected, MARGIN = 2, FUN = function(x){x/sum(x)})
+  
+  # df_gen_selected = as.matrix(df_gen_selected) %*% matrix(data = 1, nrow = 1, ncol = ncol(df_cons_selected))
+  # distance <- pracma::distmat(X = t(df_cons_selected_norm), Y = df_gen_selected_norm)
+  
+  distance <- pracma::distmat(X = t(df_cons_sunny), Y = df_gen_sunny)
+
+  # TODO: plot the sun generation curve and all the rest of the curves with continuous color scale according to the distance  
+  # checking:
+  # df_cons_selected_1 = df_cons_selected[, order(distance)[1]]
+  # ggplot() + 
+  #   geom_point(aes(x = 1:length(df_cons_selected_1), y = df_cons_selected_1)) +
+  #   geom_point(aes(x = 1:length(df_gen_selected), y = df_gen_selected), color = "green")
+  
+  ordering = order(distance)
+  df_cons_sunny_ordered = df_cons_sunny[, ordering]
+  # mean_cons_order = order(colMeans(df_cons_sunny), decreasing = T)
+
+  return(df_cons_sunny_ordered)
+}
+
+
 ############################# AUX - operative #############################
 
 
@@ -1888,6 +2710,7 @@ calculate_gen_assigned_betas <- function(df_gen_day, matrix_coefficients){
 
 calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
   
+  # df_cons_selected = df_cons_to_optimize
   df_cons_selected = df_cons
   
   not_selected_cons = (combination == 0) 
@@ -1923,7 +2746,8 @@ calculate_payback_betas <- function(purchase_price_sunny, df_cons_selected_day, 
   
   profit_period = cost_old - cost_sun
   ##### TODO PAYBACK: this 360 should change
-  profit_one_year = profit_period * 360 
+  # 360/24 = 15
+  profit_one_year = profit_period * 15 
 
   payback_years = individual_investment / profit_one_year 
   
@@ -2379,6 +3203,8 @@ calculate_surplus_hourly_individual_betas <- function(matrix_coefficients, df_ge
 }
 
 
+
+
 ############################# AUX - plot #############################
 
 
@@ -2398,5 +3224,14 @@ calulate_payback_surplus_for_matrix <- function(matrix_coefficients, df_gen_sunn
   
   surplus = sum(calculate_surplus_hourly_individual_betas(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny))
   return(data.frame("payback" = payback, "surplus" = surplus))
+}
+
+
+calulate_payback_surplus_for_matrix_by_user <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, n_community, purchase_price_sunny, individual_investment_selected){
+  
+  payback = calculate_payback_betas(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment_selected, matrix_coefficients)
+  surplus = colSums(calculate_surplus_hourly_individual_betas(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny))
+  
+  return(list("payback" = payback, "surplus" = surplus))
 }
 

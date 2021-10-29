@@ -396,6 +396,62 @@ fitness_2_betas <- function(x, combination, df_gen_day, df_cons_selected_day, in
   return(-score)
 }
 
+
+############################# plot #############################
+
+
+plot_planning <- function(name_file, list_box_season_ordered, df_cons_ordered_selected, df_gen, df_local_time){
+  
+  
+  
+  user_number = as.numeric(gsub(x = colnames(df_cons_ordered_selected), pattern = "cons_", replacement = ""))
+  season_types = c("summer_1.1", "summer_1.2", "summer_1.3", "summer_1.4", "summer_1.5", "summer_2", "mid_season_1", "mid_season_2", "winter_1", "winter_2")  
+  
+  paste(season_types, user_number%%8, sep = "_")
+  
+  
+  df_plot <- data.frame("season" = df_local_time$season,
+                        "month" = df_local_time$month,
+                        "date" = df_local_time$date, 
+                        "hour" = df_local_time$hour, 
+                        "time" = 1:nrow(df_local_time),
+                        "generation" = df_gen$energy 
+  )
+  
+  df_plot = cbind(df_plot, df_cons_ordered_selected)
+  
+  seasons = c("summer", "mid_season", "winter")
+  days = c(1, 2)
+  
+  for (season in seasons) {
+    # season = "summer"
+    for (day in days) {
+      # day = 1
+      # list_users[[paste0(season, day)]]
+      
+      users = grepl(pattern = paste(season, day, sep = "_"), x = names(list_box_season_ordered))  
+      
+      df_plot_selected = df_plot[df_plot$season == season & df_plot$date == day, c(grep("cons|generation|time", colnames(df_plot)))]
+      
+      df_plot_selected_important_users = df_plot_selected[, c(T, F, users)] 
+      df_plot_selected_redundant_users = df_plot_selected[, c(T, F, !users)]
+      
+      df_plot_selected_important_users = melt(data = df_plot_selected_important_users, id.vars = "time", variable.name = "series")
+      df_plot_selected_redundant_users = melt(data = df_plot_selected_redundant_users, id.vars = "time", variable.name = "series")
+      
+      p <- ggplot() + 
+        geom_line(aes(df_plot_selected$time, df_plot_selected$generation)) + 
+        geom_line(aes(df_plot_selected_important_users$time, df_plot_selected_important_users$value, color = df_plot_selected_important_users$series)) + 
+        geom_line(aes(df_plot_selected_redundant_users$time, df_plot_selected_redundant_users$value, color = df_plot_selected_redundant_users$series), linetype = 2)
+      ggsave(filename = paste0(name_file, "planning_",season, day) , plot = p, device = "pdf", width = 7, height = 3)
+      
+    }
+  }
+  
+  return()
+}
+
+
 ############################# AUX - operative #############################
 
 

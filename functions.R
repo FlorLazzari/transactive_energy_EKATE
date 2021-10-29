@@ -299,17 +299,20 @@ optimization_1_to_analize_convergence <- function(n_community, n_binary_rep, df_
   toc = Sys.time()
   time = toc-tic
   
-  # solutions = optim_results@solution
-  # combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+  solutions = optim_results@solution
+  selected_combination = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
   
   x_solution = optim_results@bestSol
-  x_solution = as.vector(unlist(x_solution))
+  # I had problems with this => changed to the transpose solution
+  # x_solution = as.vector(unlist(x_solution))
+  x_solution = lapply(X = x_solution, FUN = t)
+  x_solution = as.vector(unlist(x_solution, recursive = F))
   n_solutions = length(x_solution)/(n_binary_rep * n_community)
   factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
   solutions = t(as.data.frame(split(x = x_solution, f = factor)))
   best_combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
   
-  return(list("best_combinations" = best_combinations, "time" = time))
+  return(list("best_combinations" = best_combinations, "selected_combination" = selected_combination, "time" = time))
 }
 
 
@@ -2171,58 +2174,6 @@ plot_tariff_signal <- function(){
 }
 
 
-plot_planning <- function(name_file, list_box_season_ordered, df_cons_ordered_selected, df_gen, df_local_time){
-  
-  
-  
-  user_number = as.numeric(gsub(x = colnames(df_cons_ordered_selected), pattern = "cons_", replacement = ""))
-  season_types = c("summer_1.1", "summer_1.2", "summer_1.3", "summer_1.4", "summer_1.5", "summer_2", "mid_season_1", "mid_season_2", "winter_1", "winter_2")  
-  
-  paste(season_types, user_number%%8, sep = "_")
-  
-  
-  df_plot <- data.frame("season" = df_local_time$season,
-                        "month" = df_local_time$month,
-                        "date" = df_local_time$date, 
-                        "hour" = df_local_time$hour, 
-                        "time" = 1:nrow(df_local_time),
-                        "generation" = df_gen$energy 
-  )
-  
-  df_plot = cbind(df_plot, df_cons_ordered_selected)
-  
-  seasons = c("summer", "mid_season", "winter")
-  days = c(1, 2)
-  
-  for (season in seasons) {
-    # season = "summer"
-    for (day in days) {
-      # day = 1
-      # list_users[[paste0(season, day)]]
-      
-      users = grepl(pattern = paste(season, day, sep = "_"), x = names(list_box_season_ordered))  
-      
-      df_plot_selected = df_plot[df_plot$season == season & df_plot$date == day, c(grep("cons|generation|time", colnames(df_plot)))]
-      
-      df_plot_selected_important_users = df_plot_selected[, c(T, F, users)] 
-      df_plot_selected_redundant_users = df_plot_selected[, c(T, F, !users)]
-      
-      df_plot_selected_important_users = melt(data = df_plot_selected_important_users, id.vars = "time", variable.name = "series")
-      df_plot_selected_redundant_users = melt(data = df_plot_selected_redundant_users, id.vars = "time", variable.name = "series")
-      
-      p <- ggplot() + 
-        geom_line(aes(df_plot_selected$time, df_plot_selected$generation)) + 
-        geom_line(aes(df_plot_selected_important_users$time, df_plot_selected_important_users$value, color = df_plot_selected_important_users$series)) + 
-        geom_line(aes(df_plot_selected_redundant_users$time, df_plot_selected_redundant_users$value, color = df_plot_selected_redundant_users$series), linetype = 2)
-      ggsave(filename = paste0(name_file, "planning_",season, day) , plot = p, device = "pdf", width = 7, height = 3)
-      
-    }
-  }
-  
-  return()
-}
-
-
 plot_iterations_convergence <- function(name, best_combinations){
 
   nrow(best_combinations)
@@ -2250,7 +2201,66 @@ plot_table_convergence <- function(name, table_combination_ordered){
   p <- ggplot() +
     geom_bar(aes(x = names(table_combination_ordered), y = table_combination_ordered), alpha = 0.5, width = 0.8, stat = "identity")   
 
-  ggsave(filename = paste0("graphs/convergence_analysis_",name), plot = p, device = "pdf", width = 6, height = 3)
+  ggsave(filename = paste0("graphs/table_convergence_",name), plot = p, device = "pdf", width = 6, height = 3)
+  return()
+}
+
+
+
+plot_iterations_convergence_surplus <- function(name, list_best_surplus){
+  
+  library(reshape)
+  library(zoo)
+  # list_best_surplus_plot = melt(data = list_best_surplus, id.variable)
+  
+  list_mean = list() 
+  list_min = list()
+  list_max = list()
+  
+  for (ordering in names(list_best_surplus)) {
+    df_best_surplus_plot = melt(list_best_surplus[[ordering]])
+    df_best_surplus_plot$value = log(df_best_surplus_plot$value)
+    df_cast <- cast(df_best_surplus_plot, variable~L1)  
+
+    df_cast = na.locf(df_cast)
+
+    list_mean[[ordering]] = t(as.data.frame(rowMeans(df_cast, na.rm = T)))
+    colnames(list_mean[[ordering]]) = 1:length(list_mean[[ordering]])
+    rownames(list_mean[[ordering]]) = NULL
+    
+    list_min[[ordering]] = t(as.data.frame(apply(df_cast, 1, FUN = min, na.rm = T)))
+    colnames(list_min[[ordering]]) = 1:length(list_min[[ordering]])
+    rownames(list_min[[ordering]]) = NULL
+    
+    list_max[[ordering]] = t(as.data.frame(apply(df_cast, 1, FUN = max, na.rm = T)))
+    colnames(list_max[[ordering]]) = 1:length(list_max[[ordering]])
+    rownames(list_max[[ordering]]) = NULL
+  }
+  
+  list_mean = melt(list_mean)
+  list_mean = list_mean[, 2:4]
+  
+  list_min = melt(list_min)
+  list_min = list_min[, 2:4]
+  
+  list_max = melt(list_max)
+  list_max = list_max[, 2:4]
+  
+  # p <- ggplot(ndata, aes(Period, fit)) + 
+  #   geom_line(aes(colour=group)) + 
+  #   geom_ribbon(aes(ymin=fit-1.96*se, ymax=fit+1.96*se, fill=group), alpha=.2) 
+  
+  # p = ggplot() + 
+  #   geom_point(aes(x = list_best_surplus_plot$variable, y = log(list_best_surplus_plot$value), color = list_best_surplus_plot$L1)) +
+  #   labs(x = "Iteration", y = "Log(surplus)")
+  # ggsave(filename = paste0("graphs/convergence_",name), plot = p, device = "pdf", width = 6, height = 3)
+  
+  p = ggplot() + 
+    geom_line(aes(x = list_mean$X2, y = list_mean$value, color = list_mean$L1)) +
+    geom_ribbon(aes(x = list_min$X2, ymin = list_min$value, ymax = list_max$value, fill = list_mean$L1), alpha=.2) +
+    labs(x = "Iteration", y = "Log(surplus)")
+  ggsave(filename = paste0("graphs/iterations_surplus_convergence_",name), plot = p, device = "pdf", width = 6, height = 3)
+  
   return()
 }
 

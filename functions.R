@@ -35,6 +35,7 @@ import_data_genome_project <- function(selected_year_consumption){
   
   # meter = meter[, c(1:as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 300)[1]))]
   last = as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 25))
+  # last = as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) > 20))
   meter = meter[, c(1:last[1])]
   first = as.numeric(which(colMeans(meter[2:ncol(meter)], na.rm = T) < 2))
   # meter = meter[, c(1,first[length(first)]:ncol(meter))]
@@ -48,7 +49,7 @@ import_data_genome_project <- function(selected_year_consumption){
   # plot(meter_public[, 2])
   
   meter = meter[as.Date(meter$time) %in% as.Date(selected_year_consumption), ]
-
+  
   # df_cons_sunny_desordered = df_cons_sunny[, number_order]
   
   return(meter)
@@ -59,7 +60,7 @@ select_month <- function(df, m=6){
   
   # select only a random month just to start:
   dates = seq(from = as.Date(paste0("2019-", as.character(m), "-01")), to = as.Date(paste0("2019-", as.character(m+1), "-01")), by = "day")
-
+  
   # df_month_1 <- df[as.Date(df$time) %in% dates, ]
   df_month_1 = df[[1]][as.Date(df[[1]]$time) %in% dates, ]
   colnames(df_month_1)[2] = "gen_1"
@@ -70,7 +71,7 @@ select_month <- function(df, m=6){
     df_month_1 <- merge(df_month_1, df[[i]], by = "time")
     colnames(df_month_1)[i+1] = vector_colnames[i-1]
   }
-
+  
   return(df_month_1)
 }
 
@@ -86,7 +87,7 @@ eliminate_outliers <- function(df, max_cut=160){
 reducing_consumption_fake <- function(df){
   
   max_gen = max(df$gen_1, na.rm = T)
-
+  
   cols_high = unique(ceiling(which(df > max_gen)/nrow(df_month_1)))
   cols_high = cols_high[-1]
   
@@ -253,8 +254,8 @@ bee_uCrossover_binary <- function(object, parents, n_binary_rep, n_community){
 
 optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, max_iter){
   
-  dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-  dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
   
   dim_search_ga = 600
   
@@ -269,7 +270,7 @@ optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optim
                       # keepBest = T,
                       pmutation = 0.7
   )
-
+  
   solutions = optim_results@solution
   combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
   combinations = combinations[!duplicated(combinations), ]
@@ -283,7 +284,7 @@ optimization_1_to_analize_convergence <- function(n_community, n_binary_rep, df_
   dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
   dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
   dim_search_ga = 600
-
+  
   tic = Sys.time()
   optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
                       nBits = n_binary_rep*n_community,
@@ -716,10 +717,10 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen_to_optimize, df
   # x = rep(0, n_binary_rep*n_community)
   # x = rep(1, n_binary_rep*n_community)
   # x = x_solution[1, ]
-
+  
   combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize)
   surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
-
+  
   # surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
   score <- surplus
   
@@ -1075,6 +1076,19 @@ plot_initial <- function(name, df){
     # geom_area(aes(x = df_sum$time, y = df_sum$consumption_sum), alpha = 0.5) +
     labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
   ggsave(filename = paste0("graphs/initial_",name) , plot = p, device = "pdf", width = 6, height = 3)
+  
+  return(p)
+}
+
+
+plot_generation <- function(df_generation){
+  
+  df_plot <- df_generation 
+  
+  p <- ggplot() + 
+    geom_line(aes(x = df_plot$time, y = df_plot$energy)) +
+    labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "Electrical Generation and Consumption", color = "")  
+  # ggsave(filename = paste0("graphs/initial_",name) , plot = p, device = "pdf", width = 6, height = 3)
   
   return(p)
 }
@@ -2175,7 +2189,7 @@ plot_tariff_signal <- function(){
 
 
 plot_iterations_convergence <- function(name, best_combinations){
-
+  
   nrow(best_combinations)
   # sum(!duplicated(best_combinations))
   
@@ -2200,7 +2214,7 @@ plot_table_convergence <- function(name, table_combination_ordered){
   
   p <- ggplot() +
     geom_bar(aes(x = names(table_combination_ordered), y = table_combination_ordered), alpha = 0.5, width = 0.8, stat = "identity")   
-
+  
   ggsave(filename = paste0("graphs/table_convergence_",name), plot = p, device = "pdf", width = 6, height = 3)
   return()
 }
@@ -2220,10 +2234,11 @@ plot_iterations_convergence_surplus <- function(name, list_best_surplus){
   for (ordering in names(list_best_surplus)) {
     df_best_surplus_plot = melt(list_best_surplus[[ordering]])
     df_best_surplus_plot$value = log(df_best_surplus_plot$value)
+    # df_best_surplus_plot$value = df_best_surplus_plot$value
     df_cast <- cast(df_best_surplus_plot, variable~L1)  
-
+    
     df_cast = na.locf(df_cast)
-
+    
     list_mean[[ordering]] = t(as.data.frame(rowMeans(df_cast, na.rm = T)))
     colnames(list_mean[[ordering]]) = 1:length(list_mean[[ordering]])
     rownames(list_mean[[ordering]]) = NULL
@@ -2370,9 +2385,9 @@ plot_disaggregated_community_betas_year_area <- function(name, df_gen_assigned, 
   grid$time = df_local_time$time[df_local_time$sunny]
   df_cons_selected_users$time = df_local_time$time
   
-  grid = rbind(grid, df_cons_selected_users[!df_cons_selected_users$time %in% grid$time,])
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
   
-  df_aux = df_cons_selected_users[!df_cons_selected_users$time %in% df_solar_consumption$time,] 
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
   df_aux[,-ncol(df_aux)] = 0
   
   df_solar_consumption = rbind(df_solar_consumption, df_aux)
@@ -2415,7 +2430,7 @@ plot_disaggregated_community_betas_year_area <- function(name, df_gen_assigned, 
     labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
   
   ggsave(filename = paste0("graphs/community_",name), plot = p, device = "pdf", width = 5, height = 3)
-
+  
   return()
 }
 
@@ -2434,12 +2449,14 @@ plot_simple_users <- function(){
   
   df_cons_to_plot$hour =  df_local_time_week$time[df_local_time_week$sunny == T]
   df_cons_to_plot = melt(data = df_cons_to_plot, id.vars = "hour")
-
+  
   # TODO: should not complete the lines in between
   ggplot(df_cons_to_plot) +  
     geom_point(aes(x = hour, y = value)) + facet_grid(variable ~ .)
   
 }
+
+
 
 
 ############################# AUX - main #############################
@@ -2448,7 +2465,6 @@ plot_simple_users <- function(){
 calculate_n_community_max <- function(generation, consumption){
   
   # minimum self consumption: 0.2?
-  
   # TODO: a small problem when the peak is a platau
   
   # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
@@ -2463,7 +2479,7 @@ calculate_n_community_max <- function(generation, consumption){
   
   # completing borders:
   peak_insolation_hours = c(T, peak_insolation_hours, T)
-    max_insolation_hours = peak_insolation_hours & high_insolation_hours
+  max_insolation_hours = peak_insolation_hours & high_insolation_hours
   
   # checking:
   # peaks = generation
@@ -2472,7 +2488,7 @@ calculate_n_community_max <- function(generation, consumption){
   # points(peaks)
   
   # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
-  n_community_mean = floor(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
+  n_community_mean = floor(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours]))) - 1
   
   return(n_community_mean)
 }
@@ -2556,6 +2572,146 @@ calculate_characteristic_days <- function(df, number_selected_year){
     }
   }
   
+  return(df_characteristic)
+}
+
+
+calculate_characteristic_days_years <- function(df_gen_complete, years){
+
+  df_characteristic = vector("list", length(years))
+  names(df_characteristic) <- years
+  df_characteristic[[names(df_characteristic)[1]]] = list()
+  
+  for (number_selected_year in as.character(years)) {
+    
+    # number_selected_year = as.character(years)[2]
+    for (m in 1:12) {
+      
+      # m = 1
+      if (m < 11) {
+        days_month = seq(from = as.Date(paste0(number_selected_year,"-",m,"-01")), to = as.Date(paste0(number_selected_year,"-",m+1,"-01")), by = "day")    
+      }else{
+        days_month = seq(from = as.Date(paste0(number_selected_year,"-",m,"-01")), to = as.Date(paste0(as.character(as.numeric(number_selected_year)+1),"-",1,"-01")), by = "day")      
+      }
+      
+      days_month = days_month[-length(days_month)]
+      
+      days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
+      days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
+      
+      ##
+      
+      df_mean_1 = data.frame("hour" = 0:23, "energy" = 0)
+      
+      df_month_week = df_gen_complete[as.Date(df_gen_complete$time) %in% days_month_week, ]
+      df_month_week_clean = df_month_week[!is.na(df_month_week$energy), ]
+      
+      ##
+      
+      df_mean_2 = data.frame("hour" = 0:23, "energy" = 0)
+      
+      df_month_end_week = df_gen_complete[as.Date(df_gen_complete$time) %in% days_month_end_week, ]
+      df_month_end_week_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
+      
+      
+      if((any(!(0:23 %in% unique(hour(df_month_week_clean$time))))) | (any(!(0:23 %in% unique(hour(df_month_end_week_clean$time)))))){
+        
+        df_characteristic[[number_selected_year]][[m]] = NA
+      }else{
+        
+        df_mean_incomplete = aggregate(df_month_week_clean$energy, by = list(hour(df_month_week_clean$time)), FUN = mean)
+        colnames(df_mean_incomplete) = c("hour", "energy")
+        
+        df_mean_1[df_mean_1$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+        df_mean_week = df_mean_1
+        
+        ##
+        
+        df_mean_incomplete = aggregate(df_month_end_week_clean$energy, by = list(hour(df_month_end_week_clean$time)), FUN = mean)
+        colnames(df_mean_incomplete) = c("hour", "energy")
+        
+        df_mean_2[df_mean_2$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+        df_mean_end_week = df_mean_2
+        
+        df_characteristic[[number_selected_year]][[m]] = rbind(df_mean_week, df_mean_end_week)
+      }
+    }
+  }
+
+  return(df_characteristic)
+}
+
+
+calculate_characteristic_days_years_2 <- function(df_gen_complete, years){
+  
+  df_characteristic = list()
+  # number_selected_year = as.character(years)[2]
+  
+  for (m in 1:12) {
+    # m = 3
+    # TODO: change to <=
+    if (m <= 11) {
+      days_month = c()
+      for (number_selected_year in years) {
+        days_month_aux = as.character(seq(from = as.Date(paste0(number_selected_year,"-",m,"-01")), to = as.Date(paste0(number_selected_year,"-",m+1,"-01")), by = "day"))    
+        days_month_aux = days_month_aux[-grep(pattern = paste0(m+1,"-01"), x = days_month_aux)]
+        days_month = c(days_month, days_month_aux)
+        # print(m)
+        # print(number_selected_year)
+        # print(days_month)
+      }
+    }else{
+      days_month = c()
+      for (number_selected_year in years) {
+        days_month_aux = as.character(seq(from = as.Date(paste0(number_selected_year,"-",m,"-01")), to = as.Date(paste0(number_selected_year+1,"-01-01")), by = "day"))      
+        days_month_aux = days_month_aux[-grep(pattern = "-01-01", x = days_month_aux)]
+        days_month = c(days_month, days_month_aux)
+        # print(m)
+      }
+    }
+
+    days_month = as.POSIXct(days_month, tz = "CET")
+    
+    days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
+    days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
+    
+    ##
+    
+    df_mean_1 = data.frame("hour" = 0:23, "energy" = 0)
+    
+    df_month_week = df_gen_complete[as.Date(df_gen_complete$time) %in% as.Date(days_month_week), ]
+    df_month_week_clean = df_month_week[!is.na(df_month_week$energy), ]
+    
+    ##
+    
+    df_mean_2 = data.frame("hour" = 0:23, "energy" = 0)
+    
+    df_month_end_week = df_gen_complete[as.Date(df_gen_complete$time) %in% as.Date(days_month_end_week), ]
+    df_month_end_week_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
+
+    if((any(!(0:23 %in% unique(hour(df_month_week_clean$time))))) | (any(!(0:23 %in% unique(hour(df_month_end_week_clean$time)))))){
+      
+      df_characteristic[[m]] = NA
+    }else{
+      
+      df_mean_incomplete = aggregate(df_month_week_clean$energy, by = list(hour(df_month_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_1[df_mean_1$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_week = df_mean_1
+      
+      ##
+      
+      df_mean_incomplete = aggregate(df_month_end_week_clean$energy, by = list(hour(df_month_end_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_2[df_mean_2$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_end_week = df_mean_2
+      
+      df_characteristic[[m]] = rbind(df_mean_week, df_mean_end_week)
+    }
+  }
+
   return(df_characteristic)
 }
 

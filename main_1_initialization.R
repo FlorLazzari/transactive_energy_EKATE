@@ -18,7 +18,6 @@ selected_year_consumption = seq(from = as.POSIXct("2018-01-01 00:00:00"), to = a
 ############################# data reading (barcelona - PV generation) #############################
 
 filename_gen_1 = "data/202105251031_charts_compare.csv"
-
 df_gen = import_one_user(filename_1 = filename_gen_1)
 colnames(df_gen) = c("time", "gen_1")
 df_gen$gen_1[df_gen$gen_1 == 0] = NA

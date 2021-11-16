@@ -1094,6 +1094,19 @@ plot_generation <- function(df_generation){
 }
 
 
+plot_generation_consumption <- function(name, df_generation, df_consumption){
+  
+  p <- ggplot() + 
+    geom_line(aes(x = df_generation$time, y = df_generation$energy, color = "PV generation")) +
+    geom_line(aes(x = df_consumption$time, y = df_consumption$energy, color = "Consumption")) +
+    labs(x = "Time [h]", y = "Electrical energy [kWh]", "title" = "", color = "")  
+  ggsave(filename = paste0("graphs/complete_",name) , plot = p, device = "pdf", width = 6, height = 3)
+  
+  return(p)
+}
+
+
+
 plot_best_combination <- function(best_combination, iteration){
   
   optimum_coefficients = as.numeric(best_combination$optimum_coefficients)
@@ -1114,7 +1127,7 @@ plot_solar_consumption_daily_mean_betas <- function(name, df_gen, df_gen_assigne
   
   m = unique(month(df_local_time$time))
   
-  df_solar_consumption = calculate_solar_consumption(df_gen_assigned, df_cons_selected_users)
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users)
   
   df_gen$hour = df_local_time$hour
   df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
@@ -1129,6 +1142,37 @@ plot_solar_consumption_daily_mean_betas <- function(name, df_gen, df_gen_assigne
     geom_area(aes(x = df_plot_solar_consumption_mean[, "hour"], y = df_plot_solar_consumption_mean[, "value"], fill = df_plot_solar_consumption_mean[,"series"]), alpha = 0.5) +
     labs(x = "Time [h]", y = "PV generation [kWh]", "title" = paste0("PV assignation for month ",m), fill = "User")  
   
+  ggsave(filename = paste0("graphs/solar_assignation_",name), plot = p, device = "pdf", width = 5, height = 3)
+  
+  return()
+}
+
+
+plot_consumption_generation_daily_mean <- function(name, df_gen_complete, df_cons_prosumer_complete){
+  
+  
+  df_gen_mean = df_gen_complete
+  df_gen_mean$hour = hour(df_gen_mean$time)
+  
+  df_gen_mean = aggregate(x = df_gen_complete, by = list(df_gen_mean$hour), FUN = 
+                            function(x){
+                              y = mean(x, na.rm = T)
+                              return(y)
+                            })
+  
+  df_cons_prosumer_complete_mean = df_cons_prosumer_complete
+  df_cons_prosumer_complete_mean$hour = hour(df_cons_prosumer_complete_mean$time)
+
+  df_cons_prosumer_complete_mean = aggregate(x = df_cons_prosumer_complete, by = list(df_cons_prosumer_complete_mean$hour), FUN =
+                                               function(x){
+                                                 y = mean(x, na.rm = T)
+                                                 return(y)
+                                               })
+  
+  p <- ggplot() +
+    geom_line(aes(x = df_gen_mean$Group.1, y = df_gen_mean$energy)) +
+    geom_area(aes(x = df_cons_prosumer_complete_mean$Group.1, y = df_cons_prosumer_complete_mean$energy), alpha = 0.5) +
+    labs(x = "Time [h]", y = "Electrical energy [kWh]")  
   ggsave(filename = paste0("graphs/solar_assignation_",name), plot = p, device = "pdf", width = 5, height = 3)
   
   return()
@@ -2457,12 +2501,22 @@ plot_simple_users <- function(){
 }
 
 
+plot_comparison_surplus <- function(name, vector_surplus){
+
+  p <- ggplot() +
+    geom_bar(aes(x = factor(1:length(vector_surplus)), y = vector_surplus, fill = factor(1:length(vector_surplus))), alpha = 0.5, width = 0.5, stat = "identity", position=position_dodge(width=0.7)) +
+    ylim(0, 250)
+  ggsave(filename = paste0("graphs/comparison_", name), plot = p, device = "pdf", width = 8, height = 3)
+  
+  return()  
+}
+
 
 
 ############################# AUX - main #############################
 
 
-calculate_n_community_max <- function(generation, consumption){
+calculate_n_community_min <- function(generation, consumption){
   
   # minimum self consumption: 0.2?
   # TODO: a small problem when the peak is a platau
@@ -2488,7 +2542,7 @@ calculate_n_community_max <- function(generation, consumption){
   # points(peaks)
   
   # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])))
-  n_community_mean = floor(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours]))) - 1
+  n_community_mean = floor(1/mean(colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours]))) 
   
   return(n_community_mean)
 }
@@ -2892,18 +2946,18 @@ calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
 }
 
 
-calculate_payback_betas <- function(purchase_price_sunny, df_cons_selected_day, df_gen_day, individual_investment, matrix_coefficients){
+calculate_payback_betas <- function(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment, matrix_coefficients){
   
-  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day, matrix_coefficients)
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
   
-  surplus_x <- df_gen_assigned - df_cons_selected_day
+  surplus_x <- df_gen_assigned - df_cons_selected_sunny
   surplus_x[surplus_x < 0] = 0
 
   sale_price = 0.0508
   
-  cost_old = colSums(purchase_price_sunny*df_cons_selected_day)
+  cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
   
-  grid_x = df_cons_selected_day - df_gen_assigned
+  grid_x = df_cons_selected_sunny - df_gen_assigned
   grid_x[grid_x < 0] = 0
   
   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
@@ -3289,7 +3343,7 @@ calculate_combinatorics = function(n, m){
 #   return(matrix_coefficients)
 # }
 
-calculate_matrix_coefficients <- function(optimizer_number, df_gen_sunny, df_cons_selected_sunny, n_community, individual_investment_selected = 0, df_local_time){
+calculate_matrix_coefficients <- function(optimizer_number, df_gen_sunny, df_cons_selected_sunny, n_community, individual_investment_selected = 0, df_local_time = 0, df_purchase_price_one_day = 0){
   
   matrix_coefficients = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
   
@@ -3305,10 +3359,12 @@ calculate_matrix_coefficients <- function(optimizer_number, df_gen_sunny, df_con
     df_gen_assigned_sunny <- calculate_gen_assigned(df_gen_sunny, combination = rep(1, n_community))
     optimum_coefficients = df_cons_selected_sunny/df_gen_assigned_sunny
     optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
-    
     matrix_coefficients = as.matrix(optimum_coefficients)
+  
   } else if (optimizer_number == 4){
-    calculate_matrix_coefficient_4(df_local_time, df_cons_selected_sunny, df_gen_sunny, df_purchase_price_one_day, n_community, individual_investment_selected)
+    matrix_coefficients = calculate_matrix_coefficient_4(df_local_time = df_local_time, df_cons_selected_sunny = df_cons_selected_sunny, df_gen_sunny = df_gen_sunny, 
+                                   df_purchase_price_one_day = df_purchase_price_one_day, n_community = n_community, 
+                                   individual_investment_selected = individual_investment_selected)
   
   }
   
@@ -3317,7 +3373,9 @@ calculate_matrix_coefficients <- function(optimizer_number, df_gen_sunny, df_con
 
 calculate_matrix_coefficient_4 <- function(df_local_time, df_cons_selected_sunny, df_gen_sunny, df_purchase_price_one_day, n_community, individual_investment_selected){
   
+  matrix_coefficients_4 = matrix(ncol = ncol(df_cons_selected_sunny), nrow = nrow(df_cons_selected_sunny))
   n_sunny_hours_start = 1
+
   for (month_i in 1:12) {
     for (date_i in 1:2) {
       
@@ -3326,7 +3384,7 @@ calculate_matrix_coefficient_4 <- function(df_local_time, df_cons_selected_sunny
       
       df_local_time_first_day = df_local_time[df_local_time$month %in% month_i & df_local_time$date %in% date_i, ] 
       n_sunny_hours = sum(df_local_time_first_day$sunny)
-      
+
       df_cons_selected_sunny_one_day = df_cons_selected_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1), ]
       df_gen_sunny_one_day = df_gen_sunny[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1)]
       
@@ -3341,14 +3399,14 @@ calculate_matrix_coefficient_4 <- function(df_local_time, df_cons_selected_sunny
                                                individual_investment_selected = individual_investment_selected),
                            varNo = dim,
                            objDim = 2,
-                           generations = 100,
+                           generations = 200,
                            popSize = 200,
                            cprob = 0.8,
                            mprob = 0.2,
                            lowerBounds = rep(0, dim),
                            upperBounds = rep(1, dim))
       
-      matrix_coefficients_month_date = choose_scenarios_normalized(optim, plot = F, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
+      matrix_coefficients_month_date = choose_scenarios_normalized(optim, plot = T, n_community, n_sunny_hours, criteria = 2, name_plot = paste0(as.character(month_i),"_",as.character(date_i)))
       matrix_coefficients_4[n_sunny_hours_start:(n_sunny_hours_start + n_sunny_hours - 1),] = matrix_coefficients_month_date
       
       n_sunny_hours_start = n_sunny_hours_start + n_sunny_hours 

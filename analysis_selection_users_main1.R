@@ -1,3 +1,8 @@
+# analysis selection users main
+
+# main 1: data reading
+# main 2: convergence studies
+
 ############################# import libraries #############################
 
 library(lubridate)

@@ -184,6 +184,15 @@ global_investment = max(df_gen$energy, na.rm = T)*1400
 # colMeans(df_cons_sunny)
 # mean(df_gen_sunny)
 
-# TODO: try thetwo versions, one in which the surplus is small but non-cero and the other in which it is cero!
+# TODO: try the two versions, one in which the surplus is small but non-cero and the other in which it is cero!
 # n_community_min = n_community_min+1
+
+
+############################# histogram users #############################
+
+# TODO:
+# missing the histogram with the mean distribution consumption of users, to show that the analysis is not biased
+
+
+
 

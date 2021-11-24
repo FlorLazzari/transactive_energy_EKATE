@@ -62,7 +62,7 @@ for (building in 1:length(list_tunning_PV)) {
   
   ############################# data reading (barcelona - consumption) #############################
 
-  filename_cons = paste0("data_update/",names(list_tunning)[[building]],".csv")
+  filename_cons = paste0("data_update/",names(list_tunning_consumption)[[building]],".csv")
   df_cons_prosumer = import_one_user(filename_1 = filename_cons)
   df_cons_prosumer = eliminate_outliers(df = df_cons_prosumer, max_cut = list_tunning_consumption[[building]]$max_cut)
 

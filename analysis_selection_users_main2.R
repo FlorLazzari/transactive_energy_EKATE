@@ -1,3 +1,16 @@
+
+
+
+
+############################# comparisons #############################
+
+# esta va a ser mi idea:
+# 1) voy a probar distintos modelos de planning que me van a dar distintos resultados (estaría bien que fueran mínimo 3 resultados) (el último puede ser definiendo las cajitas de forma distinta)
+# 2) pruebo convergencia para los 3 modelos
+# 3) de ahí aplico la optimización 2 y veo los resultados (para que los resultados sean consistentes entonces el payback tiene que estar bien calculado si o si (no solo tomar la mean!))
+
+
+
 ############################# defining model 1: boxes #############################
 # TODO:
 n_community = 7
@@ -15,7 +28,7 @@ max_run = 40
 # # results: a convergence analysis 
 # # problem, Im not solving the convergence problem! => but when I enlarge the sun generation the convergence problem is solved
 
-############################# graph: convergence table #############################
+############################# graph:1 convergence table #############################
 # TODO: important! in import_data_genome_project the users are being ordered by mean hourly consumption!
 # then this free model is not free at all => should introduce some randomness to make it a real free model 
 
@@ -95,12 +108,14 @@ for (ordering in names(list_cons_sunny_ordering)) {
   surplus = as.character(round(surplus, digits = 2))
   table_surplus_ordering = table(surplus)
   
-  plot_table_convergence(name = ordering, table_surplus_ordering)
+  # plot_table_convergence(name = ordering, table_surplus_ordering)
 
 }
 
+plot_table_convergence_final(name = "final", list_combination, df_gen_sunny, df_cons_sunny)
 
-############################# graph: convergence vs iteration #############################
+
+############################# graph:2 convergence vs iteration #############################
 # convergence graph
 # TODO: working here to have a "mean" (for all the iterations) convergence graph for each of the orderings
 # will not have a mean, will just draw all the lines one on top of the other
@@ -180,14 +195,10 @@ for (ordering in names(list_cons_sunny_ordering)) {
 
 plot_iterations_convergence_surplus(name = "trouble_solved_", list_best_surplus)
 
+list_best_surplus = list("free" = list_best_surplus[["free"]], 
+                         "self_consumption" = list_best_surplus[["self_consumption"]])
+plot_iterations_convergence_surplus(name = "final", list_best_surplus)
 
-
-############################# comparisons #############################
-
-# esta va a ser mi idea:
-# 1) voy a probar distintos modelos de planning que me van a dar distintos resultados (estaría bien que fueran mínimo 3 resultados) (el último puede ser definiendo las cajitas de forma distinta)
-# 2) pruebo convergencia para los 3 modelos
-# 3) de ahí aplico la optimización 2 y veo los resultados (para que los resultados sean consistentes entonces el payback tiene que estar bien calculado si o si (no solo tomar la mean!))
 
 
 

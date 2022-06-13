@@ -147,6 +147,9 @@ df_cons_sunny = df_cons[df_local_time$sunny, ]
 # df_purchase_price_one_day_ = data.frame("price" = c(rep(0.15,8), rep(0.18,2), rep(0.26,4), rep(0.15,4), rep(0.26,4), rep(0.18,2)),
 #                                        "time" = c(0:23))
 
+# TODO: use data_update/jun_dic_price.csv
+# this data comes from https://www.esios.ree.es/ (fuente confiable para poner en paper)
+
 df_purchase_price_one_day = data.frame("price" = c(0.1957, 0.1986, 0.1948, 0.1890, 0.1891, 0.2014, 0.2192, 0.2316, 0.2498, 0.2429, 0.2391, 0.2198, 0.2354, 0.2375, 0.2317, 0.2440, 0.2468, 0.2598, 0.2905, 0.2990, 0.2978, 0.2738, 0.2553, 0.2534),
                                        "time" = c(0:23)
                                        )

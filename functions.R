@@ -100,6 +100,136 @@ reducing_consumption_fake <- function(df){
 
 ############################# operative #############################
 
+calculate_self_suff_and_cons <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$date,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot3_mean_agg = aggregate(x = df_plot3, by = list(df_plot3$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  df_plot3_mean_agg = df_plot3_mean_agg[, c(-1, -2, -3)]
+
+  return(df_plot3_mean_agg)
+}
+
+calculate_self_sufficiency <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time){
+  
+  df_mean = calculate_self_suff_and_cons(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  self_sufficiency = sum(df_mean$Solar_consumption) / ( sum(df_mean$Solar_consumption) + sum(df_mean$Grid_consumption) ) 
+
+  return(self_sufficiency)
+}
+
+
+calculate_self_consumption <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time){
+  
+  df_mean = calculate_self_suff_and_cons(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  solar_self_consumption = sum(df_mean$Solar_consumption) / ( sum(df_mean$Solar_consumption) + sum(df_mean$Solar_surplus) ) 
+  
+  return(solar_self_consumption)
+}
+
+
+
+
+calculate_daily_avoided_emissions <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_users, df_local_time){
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
+  
+  m = unique(month(df_local_time$time))
+  
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users)
+  
+  df_gen$hour = df_local_time$hour
+  df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+  
+  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  df_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  
+  df_avoided_emissions = sum(df_solar_consumption_mean$value) * 0.357
+  
+  return(df_avoided_emissions)
+}
+
+
+calculate_yearly_avoided_emissions <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_users, df_local_time){
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
+
+  m = unique(month(df_local_time$time))
+  
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users)
+  
+  df_gen$hour = df_local_time$hour
+  df_solar_consumption$hour = df_local_time$hour[df_local_time$sunny]
+  
+  df_gen_mean = aggregate(x = df_gen, by = list(df_gen$hour), FUN = mean)
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption, by = list(df_solar_consumption$hour), FUN = mean)
+  df_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  
+  df_avoided_emissions = sum(df_solar_consumption_mean$value) * 0.357
+
+  df_yearly_avoided_emissions = df_avoided_emissions*360
+  
+  return(df_yearly_avoided_emissions)
+}
+
+
+calculate_sunny_emissions <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny){
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients)
+  
+  df_grid = df_cons_selected_sunny - df_gen_assigned
+  df_grid[df_grid < 0] = 0
+  
+  df_sunny_emissions = df_grid*0.357
+  
+  return(df_sunny_emissions)
+}
+
+
 calculate_surplus_hourly_individual <- function(df_gen, df_cons, combination){
   not_selected_cons = (combination == 0) 
   df_cons[, not_selected_cons] = 0
@@ -833,21 +963,16 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
   # TODO:
   payback_years[is.na(payback_years)] = 10
   payback_years[payback_years > 50] = 10
+  # payback_years[payback_years > 50] = 50
   
   payback_ideal = 0
-  # TODO:
   f2_payback = sum(exp(payback_years - payback_ideal))
   
   # f2_payback = sd(payback_years)
-  
-  # TODO: add something like this
   # cost_payback_2 = max(payback_years) - min(payback_years) 
   
   # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
   
-  
-  # return(c(-f1_surplus, -f2_payback))
-  # took the minus sign because the optimization algo is set to minimize:
   return(c(f1_surplus, f2_payback))
 }
 
@@ -2782,6 +2907,194 @@ plot_disaggregated_community_betas_year_area_mean <- function(name, df_gen_assig
 }
 
 
+plot_disaggregated_community_betas_year_area_mean_final <- function(name, df_gen, df_gen_assigned, df_cons_selected_users, df_local_time, individual_investment_selected, payback, selected_3users){  
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$date,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  # df_plot3 = df_plot3[df_plot3$date == 1, ]
+   
+  df_plot3_mean_agg = aggregate(x = df_plot3, by = list(df_plot3$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  df_plot3_mean_agg = df_plot3_mean_agg[, c(-1, -2, -3)]
+  df_plot3_mean = melt(df_plot3_mean_agg, id.vars = "hour")
+  
+  levels(df_plot3_mean$variable) = c("Solar Excess", "Solar Consumption", "Grid Consumption")
+  
+  self_sufficiency = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Solar_surplus) ) 
+  
+  p3 <- ggplot(df_plot3_mean, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) + 
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficieny = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom") +
+    ylim(0, 18)
+  
+  
+  
+  
+
+  
+  df_gen_assigned = df_gen_assigned[, c(user_min, user_near_mean, user_max)]
+  df_cons_selected_users_sunny = df_cons_selected_users_sunny[, c(user_min, user_near_mean, user_max)]
+  individual_investment_selected = individual_investment_selected[c(user_min, user_near_mean, user_max)] 
+  payback_selected = payback[selected_3users]
+
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  investment_order = order(individual_investment_selected, decreasing = T)
+  
+  investment_ordered = individual_investment_selected[order(individual_investment_selected, decreasing = T)]
+  df_solar_consumption_ordered =  df_solar_consumption[, investment_order]
+  df_gen_assigned_ordered =  df_gen_assigned[, investment_order]
+  payback_selected = payback_selected[investment_order]
+  
+  
+  colnames(df_solar_consumption_ordered) = c(1:ncol(df_solar_consumption_ordered))
+  colnames(df_gen_assigned_ordered) = c(1:ncol(df_gen_assigned_ordered))
+  
+  df_solar_consumption_ordered$hour = df_local_time$hour[df_local_time$sunny]
+  # df_solar_consumption_ordered$month = df_local_time$month[df_local_time$sunny]
+  
+  df_gen_assigned_ordered$hour = df_local_time$hour[df_local_time$sunny]
+  # df_gen_assigned_ordered$month = df_local_time$month[df_local_time$sunny]
+  
+  # df_solar_consumption_ordered$month_hour = paste0(df_solar_consumption_ordered$hour,"_",df_solar_consumption_ordered$month)
+  # df_gen_assigned_ordered$month_hour = paste0(df_gen_assigned_ordered$hour,"_",df_gen_assigned_ordered$month)
+  
+  # df_solar_consumption_mean = aggregate(x = df_solar_consumption_ordered, by = list(df_solar_consumption_ordered$month_hour), FUN = mean)
+  # df_gen_assigned_mean = aggregate(x = df_gen_assigned_ordered, by = list(df_gen_assigned_ordered$month_hour), FUN = mean)
+  
+  df_solar_consumption_mean = aggregate(x = df_solar_consumption_ordered, by = list(df_solar_consumption_ordered$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  df_gen_assigned_mean = aggregate(x = df_gen_assigned_ordered, by = list(df_gen_assigned_ordered$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  
+  # df_plot_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1|month_hour", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = c("hour", "month"))
+  # df_plot_gen_assigned_mean <- melt(data = df_gen_assigned_mean[, -grep(pattern = "Group.1|month_hour", x = colnames(df_gen_assigned_mean))], variable.name = "series", id.vars = c("hour", "month"))
+  
+  df_plot_solar_consumption_mean <- melt(data = df_solar_consumption_mean[, -grep(pattern = "Group.1", x = colnames(df_solar_consumption_mean))], variable.name = "series", id.vars = "hour")
+  df_plot_gen_assigned_mean <- melt(data = df_gen_assigned_mean[, -grep(pattern = "Group.1", x = colnames(df_gen_assigned_mean))], variable.name = "series", id.vars = "hour")
+  
+  df_plot_solar_assigned_cons_mean = cbind(df_plot_gen_assigned_mean, df_plot_solar_consumption_mean$value)
+  
+  colnames(df_plot_solar_assigned_cons_mean)[c(3,4)] = c("solar_assig", "solar_cons")
+  # df_plot_solar_assigned_cons_mean_summer = df_plot_solar_assigned_cons_mean[df_plot_solar_assigned_cons_mean$month == 7,] 
+  
+
+  # investment:
+  df_plot_investment = data.frame("series" = unique(df_plot_solar_consumption_mean_summer$series), 
+                                  "value" = investment_ordered)
+  
+  p1 <- ggplot(df_plot_investment, aes(x = series, y = value, fill = series))+
+    geom_bar(stat = "identity", alpha = 0.5)  + 
+    theme(text = element_text(size=14), axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), legend.text = element_blank(), legend.title = element_blank(), legend.position = "none") + 
+    labs(y = "Investment [$]" , fill = "User") +
+    ylim(0, 950) +
+    scale_fill_brewer(palette="Dark2")
+  # ggsave(filename = paste0("graphs/investment",name), plot = p1, device = "pdf", width = 5, height = 3)
+  
+  # assignment:
+  colnames(df_purchase_price_one_day)[2] = "hour"
+  df_plot_solar_assigned_cons_mean = merge(x = df_plot_solar_assigned_cons_mean, y = df_purchase_price_one_day)
+  
+  
+  levels(df_plot_solar_assigned_cons_mean$series) = as.factor(round(payback_selected, digits = 2))
+  
+  # scale_factor = (max(df_plot_solar_assigned_cons_mean$solar_assig) - min(df_plot_solar_assigned_cons_mean$solar_assig))/ (max(df_plot_solar_assigned_cons_mean$price) - min(df_plot_solar_assigned_cons_mean$price))
+  
+  # changed to standarize the scale :)
+  scale_factor = (0.50 - 0) / (0.299 - 0.2198)
+  
+  mean_price = mean(df_plot_solar_assigned_cons_mean$price)
+  # mean_solar_assig = mean(df_plot_solar_assigned_cons_mean$solar_assig)
+  mean_solar_assig = mean(c(0, 0.65))
+  
+  p2 <- ggplot(df_plot_solar_assigned_cons_mean) +
+    # geom_line(aes(x = df_gen_mean$hour, y = df_gen_mean$energy)) +
+    geom_area(aes(x = hour, y = solar_assig, fill = series), position = 'stack', alpha = 0.5) + #, linetype = 1, colour="black", show.legend = FALSE) +
+    geom_area(aes(x = hour, y = solar_cons, fill = series), position = 'stack', alpha = 0.5) + #, linetype = 1, colour="black", show.legend = FALSE) +
+    # geom_line(aes(x = hour, y = ((price - mean_price) * scale_factor + mean_solar_assig)), linetype = 2) + #, colour = "black")  +
+    
+    geom_line(aes(x = hour, y = ((price - mean_price) * scale_factor + mean_solar_assig)), linetype = 2) + #, colour = "black")  +
+    
+    facet_grid(df_plot_solar_assigned_cons_mean$series ~ .) + 
+    # TODO: should change the scale_factor here:
+    # scale_y_continuous("Solar Generation [kWh]", sec.axis = sec_axis(~./scale_factor, name = "Price [$/kWh]")) +
+    scale_y_continuous("Solar Generation [kWh]", 
+                       limits = c(0, 0.7), 
+                       sec.axis = sec_axis(~ (. - mean_solar_assig) / scale_factor + mean_price, name = "Price [$/kWh]")) +
+    scale_x_continuous(limits = c(8, 19)) +
+    theme(strip.background = element_blank(), strip.text = element_blank()) + 
+    labs(x = "Time [h]", fill = "Ind Payback") +
+    scale_fill_brewer(palette="Dark2")
+  # ylim(-0.05, 0.85)
+  # ggsave(filename = paste0("graphs/solar_assignation_",name), plot = p2, device = "pdf", width = 5, height = 3)
+  
+  
+  library(ggpubr)
+  p_1_2_3 <- ggarrange(p3, p1, p2, widths = c(3, 1, 2.5), ncol = 3)
+  
+  # ggsave(filename = paste0("graphs/solar_assignation_investment_3",name,".pdf"), plot = p_1_2, device = "pdf", width = 8, height = 7)
+
+  ggsave(filename = paste0("graphs/final",name,".pdf"), plot = p_1_2_3, device = "pdf", width = 14, height = 5)
+  
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  return()
+}
+
+
+
+
 plot_simple_users <- function(){
   
   week_days = df_local_time$date == 2
@@ -2893,6 +3206,221 @@ plot_comparison_stats <- function(name, list_surplus, list_max_payback, list_mea
     theme(text = element_text(size=14), legend.position="bottom", axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) + 
     coord_flip()
   ggsave(filename = paste0("graphs/general_comparison_flip",name,".pdf"), plot = p1_flip, device = "pdf", width = 10, height = 8)
+  
+  return()
+}
+
+
+plot_comparison_stats_avoided_emissions <- function(name, list_avoided_emissions, list_max_payback, list_mean_payback, list_diff_max_min_payback){
+  
+  library(latex2exp)
+  selections = c("(1) Random selection", "(2) Random large selection", "(3) Optimization 1 selection")
+  assignments = c("(a) Investment", "(b) Solar excess", "(c) Optimization 2")
+  
+  df_plot_avoided_emissions = melt(list_avoided_emissions)
+  df_plot_avoided_emissions$L1 = factor(df_plot_avoided_emissions$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_avoided_emissions$L1) = selections
+  levels(df_plot_avoided_emissions$variable) = assignments
+  df_plot_avoided_emissions$stat = factor("Avoided CO2 emissions [kg]")
+  
+  df_plot_max_payback = melt(list_max_payback)
+  df_plot_max_payback$L1 = factor(df_plot_max_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_max_payback$L1) = selections
+  levels(df_plot_max_payback$variable) = assignments
+  df_plot_max_payback$stat = factor("Max payback [years]")
+  
+  df_plot_mean_payback = melt(list_mean_payback)
+  df_plot_mean_payback$L1 = factor(df_plot_mean_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_mean_payback$L1) = selections
+  levels(df_plot_mean_payback$variable) = assignments
+  df_plot_mean_payback$stat = factor("Mean payback [years]")
+  
+  df_plot_diff_max_min_payback = melt(list_diff_max_min_payback)
+  df_plot_diff_max_min_payback$L1 = factor(df_plot_diff_max_min_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_diff_max_min_payback$L1) = selections
+  levels(df_plot_diff_max_min_payback$variable) = assignments
+  df_plot_diff_max_min_payback$stat = factor("Delta payback [years]")
+  
+  df_plot = rbind(df_plot_avoided_emissions, df_plot_max_payback, df_plot_mean_payback, df_plot_diff_max_min_payback)
+  
+  p1 <- ggplot(df_plot, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(stat ~ L1, scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "", y = "", fill = "Solar Assignment") +
+    geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  ggsave(filename = paste0("graphs/general_comparison",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 9)
+  
+  p1_flip <- ggplot(df_plot, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(L1 ~ stat, scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "", y = "", fill = "Solar Assignment") +
+    geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom", axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) + 
+    coord_flip()
+  ggsave(filename = paste0("graphs/general_comparison_flip",name,".pdf"), plot = p1_flip, device = "pdf", width = 10, height = 8)
+  
+  return()
+}
+
+
+plot_comparison_stats_complete <- function(name, list_surplus, list_avoided_emissions, list_self_sufficiency, list_self_consumption, list_max_payback, list_mean_payback, list_diff_max_min_payback){
+  
+  library(latex2exp)
+  selections = c("(1) Random selection", "(2) Random large selection", "(3) Optimization 1 selection")
+  assignments = c("(a) Investment", "(b) Solar excess", "(c) Optimization 2")
+  
+  df_plot_surplus = melt(list_surplus)
+  df_plot_surplus$L1 = factor(df_plot_surplus$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_surplus$L1) = selections
+  levels(df_plot_surplus$variable) = assignments
+  df_plot_surplus$stat = factor("Solar excess [kWh]")
+  
+  df_plot_avoided_emissions = melt(list_avoided_emissions)
+  df_plot_avoided_emissions$L1 = factor(df_plot_avoided_emissions$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_avoided_emissions$L1) = selections
+  levels(df_plot_avoided_emissions$variable) = assignments
+  df_plot_avoided_emissions$stat = factor("Avoided CO2 [kg]")
+
+  df_plot_self_sufficiency = melt(list_self_sufficiency)
+  df_plot_self_sufficiency$L1 = factor(df_plot_self_sufficiency$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_self_sufficiency$L1) = selections
+  levels(df_plot_self_sufficiency$variable) = assignments
+  df_plot_self_sufficiency$stat = factor("Self-sufficiency [%]")
+
+  df_plot_self_consumption = melt(list_self_consumption)
+  df_plot_self_consumption$L1 = factor(df_plot_self_consumption$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_self_consumption$L1) = selections
+  levels(df_plot_self_consumption$variable) = assignments
+  df_plot_self_consumption$stat = factor("Self-consumption [%]")
+
+  df_plot_max_payback = melt(list_max_payback)
+  df_plot_max_payback$L1 = factor(df_plot_max_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_max_payback$L1) = selections
+  levels(df_plot_max_payback$variable) = assignments
+  df_plot_max_payback$stat = factor("Max payback [years]")
+  
+  df_plot_mean_payback = melt(list_mean_payback)
+  df_plot_mean_payback$L1 = factor(df_plot_mean_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_mean_payback$L1) = selections
+  levels(df_plot_mean_payback$variable) = assignments
+  df_plot_mean_payback$stat = factor("Mean payback [years]")
+  
+  df_plot_diff_max_min_payback = melt(list_diff_max_min_payback)
+  df_plot_diff_max_min_payback$L1 = factor(df_plot_diff_max_min_payback$L1, levels = c("random_n_comm", "random_big", "optimal") )
+  levels(df_plot_diff_max_min_payback$L1) = selections
+  levels(df_plot_diff_max_min_payback$variable) = assignments
+  df_plot_diff_max_min_payback$stat = factor("Delta payback [years]")
+  
+  df_plot1 = rbind(df_plot_max_payback, df_plot_mean_payback, df_plot_diff_max_min_payback)
+  
+  p1 <- ggplot(df_plot1, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(stat ~ L1, scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "", y = "", fill = "Solar Assignment") +
+    geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  ggsave(filename = paste0("graphs/general_comparison_economic",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 7)
+  
+
+  df_plot2 = rbind(df_plot_surplus, df_plot_avoided_emissions, df_plot_self_sufficiency, df_plot_self_consumption)
+  
+  p2 <- ggplot(df_plot2, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(stat ~ L1, scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "", y = "", fill = "Solar Assignment") +
+    geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  ggsave(filename = paste0("graphs/general_comparison_environmental",name,".pdf"), plot = p2, device = "pdf", width = 8, height = 7)
+  
+  
+  return()
+}
+
+
+plot_comparison_stats_cut <- function(name, list_surplus, list_avoided_emissions, list_self_sufficiency, list_self_consumption, list_max_payback, list_mean_payback, list_diff_max_min_payback){
+  
+  selections = c("(1) Random selection", "(2) Random large selection", "(3) Optimization 1 selection")
+  assignments = c("(a) Investment", "(b) Solar excess", "(c) Optimization 2")
+  
+  selections_bis = c("Profitable", "Sustainable", "Novel")
+  #  will select only the ones Im interested in showing:
+  
+  selected_list_surplus = c(list_surplus$random_n_comm$investment, list_surplus$random_big$solar_excess, list_surplus$optimal$solar_excess_and_payback)
+  df_plot_surplus_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")), 
+                                        "value" = selected_list_surplus, "stat" = factor("Solar excess [kWh]"))
+  
+  selected_avoided_emissions = c(list_avoided_emissions$random_n_comm$investment, list_avoided_emissions$random_big$solar_excess, list_avoided_emissions$optimal$solar_excess_and_payback)
+  df_plot_avoided_emissions_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")),  
+                                                  "value" = selected_avoided_emissions, "stat" = factor("Avoided CO2 [kg]"))
+  
+  selected_self_sufficiency = c(list_self_sufficiency$random_n_comm$investment, list_self_sufficiency$random_big$solar_excess, list_self_sufficiency$optimal$solar_excess_and_payback)
+  selected_self_sufficiency = selected_self_sufficiency*100
+  
+  df_plot_self_sufficiency_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")),  
+                                                 "value" = selected_self_sufficiency, "stat" = factor("Self-sufficiency [%]"))
+  
+  selected_self_consumption = c(list_self_consumption$random_n_comm$investment, list_self_consumption$random_big$solar_excess, list_self_consumption$optimal$solar_excess_and_payback)
+  selected_self_consumption = selected_self_consumption*100
+  
+  df_plot_self_consumption_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")), 
+                                                 "value" = selected_self_consumption, "stat" = factor("Self-consumption [%]"))
+  
+  df_plot = rbind(df_plot_surplus_selected, df_plot_self_consumption_selected, df_plot_avoided_emissions_selected, df_plot_self_sufficiency_selected)
+
+  p1 <- ggplot(df_plot, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity", width = 0.5) + 
+    facet_grid(stat ~ ., scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "Environmental", y = "", fill = "EC") +
+    # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    scale_y_continuous(position = "right") +
+    # theme(text = element_text(size=17), legend.position= "none", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+    theme(text = element_text(size=17), legend.position= "none", axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  ggsave(filename = paste0("graphs/general_comparison_cut_1",name,".pdf"), plot = p1, device = "pdf", width = 3, height = 8.5)
+  
+  
+  
+  
+  selected_mean_payback = c(list_mean_payback$random_n_comm$investment, list_mean_payback$random_big$solar_excess, list_mean_payback$optimal$solar_excess_and_payback)
+  df_plot_mean_payback_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")), 
+                                             "value" = selected_mean_payback, "stat" = factor("Mean payback [years]"))
+  
+  selected_max_payback = c(list_max_payback$random_n_comm$investment, list_max_payback$random_big$solar_excess, list_max_payback$optimal$solar_excess_and_payback)
+  df_plot_max_payback_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")), 
+                                            "value" = selected_max_payback, "stat" = factor("Max payback [years]"))
+
+  selected_diff_max_min_payback = c(list_diff_max_min_payback$random_n_comm$investment, list_diff_max_min_payback$random_big$solar_excess, list_diff_max_min_payback$optimal$solar_excess_and_payback)
+  df_plot_diff_max_min_payback_selected = data.frame("variable" = factor(selections_bis, levels = c("Profitable", "Sustainable", "Novel")),  
+                                                     "value" = selected_diff_max_min_payback, "stat" = factor("Delta payback [years]"))
+  
+  df_plot = rbind(df_plot_mean_payback_selected, df_plot_max_payback_selected, df_plot_diff_max_min_payback_selected)
+
+  
+  p2 <- ggplot(df_plot, aes(x = variable, y = value, fill = variable)) +
+    geom_bar(alpha = 0.5, stat = "identity", width = 0.5) + 
+    facet_grid(stat ~ ., scales = "free", switch = "y") + 
+    # labs(x = TeX("$\\beta$ assignment"), y = "Global Solar Excess [kWh]", fill = "") + 
+    labs(x = "Economic", y = "", fill = "REC") +
+    # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+    scale_y_continuous(position = "right") +
+    # theme(text = element_text(size=17), legend.position="right", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+    theme(text = element_text(size=17), legend.position="right", axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  
+  # ggsave(filename = paste0("graphs/general_comparison_cut_2",name,".pdf"), plot = p1, device = "pdf", width = 5, height = 7)
+  ggsave(filename = paste0("graphs/general_comparison_cut_2",name,".pdf"), plot = p1, device = "pdf", width = 4.8, height = 8.5)
+  
+  p_1_2 <- ggarrange(p1, p2, widths = c(1.4, 2), ncol = 2)
+  ggsave(filename = paste0("graphs/general_comparison_cut_new",name,".pdf"), plot = p_1_2, device = "pdf", width = 9, height = 8.5)
+  
   
   return()
 }

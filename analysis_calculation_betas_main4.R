@@ -75,6 +75,77 @@ for (i in 1:length(list_combination)) {
   list_surplus[[i]] = data.frame("investment" = surplus_2, "solar_excess" = surplus_3, "solar_excess_and_payback" = surplus_4)
 }
 
+
+list_sunny_emissions = vector("list", 3)
+names(list_sunny_emissions) = c("optimal", "random_n_comm", "random_big") 
+
+for (i in 1:length(list_combination)) {
+  combination_i = list_combination[[i]]
+  n_community = sum(combination_i)
+  df_cons_selected_sunny = df_cons_sunny[, combination_i==1]
+  df_cons_selected_users = df_cons[, combination_i==1]  
+
+  sunny_emissions_2 = sum(calculate_sunny_emissions(list_matrix_coefficients_2[[i]], df_gen_sunny, df_cons_selected_sunny))
+  sunny_emissions_3 = sum(calculate_sunny_emissions(list_matrix_coefficients_3[[i]], df_gen_sunny, df_cons_selected_sunny))
+  sunny_emissions_4 = sum(calculate_sunny_emissions(list_matrix_coefficients_4[[i]], df_gen_sunny, df_cons_selected_sunny))
+  
+  list_sunny_emissions[[i]] = data.frame("investment" = sunny_emissions_2, "solar_excess" = sunny_emissions_3, "solar_excess_and_payback" = sunny_emissions_4)
+}
+
+
+list_avoided_emissions = vector("list", 3)
+names(list_avoided_emissions) = c("optimal", "random_n_comm", "random_big") 
+
+for (i in 1:length(list_combination)) {
+  combination_i = list_combination[[i]]
+  n_community = sum(combination_i)
+  df_cons_selected_sunny = df_cons_sunny[, combination_i==1]
+  df_cons_selected_users = df_cons[, combination_i==1]  
+  
+  avoided_emissions_2 = calculate_daily_avoided_emissions(list_matrix_coefficients_2[[i]], df_gen_sunny, df_cons_selected_sunny, df_local_time)
+  avoided_emissions_3 = calculate_daily_avoided_emissions(list_matrix_coefficients_3[[i]], df_gen_sunny, df_cons_selected_sunny, df_local_time)
+  avoided_emissions_4 = calculate_daily_avoided_emissions(list_matrix_coefficients_4[[i]], df_gen_sunny, df_cons_selected_sunny, df_local_time)
+
+  list_avoided_emissions[[i]] = data.frame("investment" = avoided_emissions_2, "solar_excess" = avoided_emissions_3, "solar_excess_and_payback" = avoided_emissions_4)
+}
+
+
+list_self_sufficiency = vector("list", 3)
+names(list_self_sufficiency) = c("optimal", "random_n_comm", "random_big") 
+
+for (i in 1:length(list_combination)) {
+  combination_i = list_combination[[i]]
+  df_cons_selected_sunny = df_cons_sunny[, combination_i==1]
+  df_cons_selected_users = df_cons[, combination_i==1]  
+  
+  self_sufficiency_2 = calculate_self_sufficiency(list_matrix_coefficients_2[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  self_sufficiency_3 = calculate_self_sufficiency(list_matrix_coefficients_3[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  self_sufficiency_4 = calculate_self_sufficiency(list_matrix_coefficients_4[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  
+  list_self_sufficiency[[i]] = data.frame("investment" = self_sufficiency_2, "solar_excess" = self_sufficiency_3, "solar_excess_and_payback" = self_sufficiency_4)
+}
+
+
+list_self_consumption = vector("list", 3)
+names(list_self_consumption) = c("optimal", "random_n_comm", "random_big") 
+
+for (i in 1:length(list_combination)) {
+  combination_i = list_combination[[i]]
+  df_cons_selected_sunny = df_cons_sunny[, combination_i==1]
+  df_cons_selected_users = df_cons[, combination_i==1]  
+  
+  self_consumption_2 = calculate_self_consumption(list_matrix_coefficients_2[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  self_consumption_3 = calculate_self_consumption(list_matrix_coefficients_3[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  self_consumption_4 = calculate_self_consumption(list_matrix_coefficients_4[[i]], df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time)
+  
+  list_self_consumption[[i]] = data.frame("investment" = self_consumption_2, "solar_excess" = self_consumption_3, "solar_excess_and_payback" = self_consumption_4)
+}
+
+
+  
+
+
+
 list_max_payback = vector("list", 3)
 list_mean_payback = vector("list", 3)
 list_min_payback_aux = vector("list", 3)
@@ -111,6 +182,12 @@ for (i in 1:length(list_combination)) {
 }
 
 plot_comparison_stats(name = "", list_surplus, list_max_payback, list_mean_payback, list_diff_max_min_payback)
+plot_comparison_stats(name = "_emissions", list_sunny_emissions, list_max_payback, list_mean_payback, list_diff_max_min_payback)
+plot_comparison_stats(name = "_avoided_emissions", list_avoided_emissions, list_max_payback, list_mean_payback, list_diff_max_min_payback)
+
+plot_comparison_stats_complete(name = "_complete3", list_surplus, list_avoided_emissions, list_self_sufficiency, list_self_consumption, list_max_payback, list_mean_payback, list_diff_max_min_payback)
+
+plot_comparison_stats_cut(name = "final", list_surplus, list_avoided_emissions, list_self_sufficiency, list_self_consumption, list_max_payback, list_mean_payback, list_diff_max_min_payback)
 
 ############################# plot 2: payback and surplus stats #############################
 
@@ -178,4 +255,53 @@ for (i in 1:3) {
 
 # TODO: calculate percentages to emphasise in the final conclusions of the paper!!! :)
 
+
+
+############################# plot 2: payback and surplus stats #############################
+
+# do 3 graphs choosing the combination for:
+# - best surplus
+# - best economic
+# - the novel
+
+vector_names = c("_optimal", "_random", "_random_large")
+
+list_matrix_to_use = list("1" = list_matrix_coefficients_4[[1]],
+                          "2" = list_matrix_coefficients_2[[2]],
+                          "3" = list_matrix_coefficients_3[[3]])
+
+for (i in 1:3) {
+  combination_i = list_combination[[i]]
+  n_community = sum(combination_i)
+  df_cons_selected_sunny = df_cons_sunny[, combination_i==1]
+  df_cons_selected_users = df_cons[, combination_i==1]  
+  
+  df_gen_assigned = calculate_gen_assigned_betas(df_gen_day = df_gen_sunny, matrix_coefficients = list_matrix_to_use[[i]])
+  
+  # to compare SURPLUS:
+  # plot_disaggregated_community_betas_year_area_mean(name = vector_names[i], df_gen_assigned, df_cons_selected_users, df_local_time)
+
+  
+  # to compare delta PAYBACK:  
+  individual_investment_selected = list_individual_investment_selected[[i]]
+  
+  payback = as.numeric(calculate_payback_betas(purchase_price_sunny = purchase_price_sunny, df_cons_selected_sunny = df_cons_selected_sunny, df_gen_sunny = df_gen_sunny, 
+                                               individual_investment = individual_investment_selected, 
+                                               matrix_coefficients = list_matrix_to_use[[i]]))
+
+  user_min = which.min(payback)
+  user_near_mean = which.min(abs(mean(payback) - payback))
+  user_max = which.max(payback)
+  
+  # plot_simple_users_2(name = vector_names[i], df_local_time, df_cons_selected_sunny[, c(user_min, user_near_mean, user_max)])
+  
+  selected_3users = c(user_min, user_near_mean, user_max)
+  
+  plot_disaggregated_community_betas_year_area_mean_final(name = vector_names[i], df_gen, df_gen_assigned, df_cons_selected_users, df_local_time, individual_investment_selected, payback, selected_3users)
+  
+}
+# explain that the 3rd doesnt change much... it is only interesnting to see the order of magnitud of the aggregated consumption, thats all
+
+
+# TODO: calculate percentages to emphasise in the final conclusions of the paper!!! :)
 

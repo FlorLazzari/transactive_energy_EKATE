@@ -1,0 +1,11 @@
+how to download price "csv"?
+
+https://www.esios.ree.es/es/analisis/1001?vis=1&start_date=01-06-2021T00%3A00&end_date=31-12-2021T23%3A50&compare_start_date=31-05-2021T00%3A00&groupby=hour
+
+
+
+ojo! problema tonto: antes que nada setear el "FIN" del calendario con la fecha que queremos
+
+el archivo a descargar se debería llamar:
+"export_TérminoDeFacturaciónDeEnergíaActivaDelPVPC2.0TD_2021-12-22_10 26.csv"
+

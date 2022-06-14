@@ -1,0 +1,66 @@
+TODO:
+
+# TODO:
+cons_1 y gen_1 corresponden al museo de diseño de barcelona -> son muy altos comparados al resto
+la instalación es realmente muy grande
+y el consumo base en enorme (porque es un museo enorme), con lo cual la instalación, por más de que sea enorme, no llega a cubrir los consumos del propio edificio 
+(no es autosuficiente)--> qué sentido tiene repartir la energía?
+con lo cual --> escenario fake: voy a usar la generación y no voy a usar el consumo del museo 
+
+# TODO: ojo! la instalación que estoy considerando tiene mas de 100kWh... la legislación no lo permite
+
+# TODO:
+changing NAs to 0
+
+# TODO:
+a good estimation of the overall investment is:  
+1000*kWpico
+if the max consumption is in SUMMER I can approximate: 
+global_investment = max(df[[1]]$energy, na.rm = T)*1100
+
+# TODO: should change this
+individual_investment = sapply(df_cons, max, na.rm = TRUE)*1100
+
+# TODO: analysis comparing: "winter" - "summer" 
+(do the optimization per month, because the billing is monthly and do the analysis seasonally)
+
+
+# TODO: how to show our novelty?? 
+compare self consumption and surplus with repartition considering:
+.standard coefficient (lo que te dice red electrica si no haces ningun analisis) and our coeff 
+.the rest of the best combinations selected
+compare cost of electricity in 25 years with and without community (solar assignation)
+
+# how to compare with other selection?? 
+.compare with a random selection of the users?? this doesnt make much sense to me 
+.compare with a selection in which none of this users exist? I should calculate the same optimization but filling with zeros in the columns of the opt_combination in the df_cons 
+
+
+# TODO: working on
+plot_comparison
+
+
+PRIORITY:
+
+# TODO: This "maximum size" should be determined by the maximum of df_gen
+
+when planning to change the algo in order to make the communities with < n_community appear
+noticed that should discard one of the floats being optimized inside the "fitness_nested_inside" GA.. and this makes no sense to me
+so I will continue discarding the cases with less than n_community participants 
+
+plan:
+
+run all the inside a loop: for 2:n_community_max
+
+
+
+# TODO: define the percentage of hippiesm vs capitalism
+cada comunidad energética definirá su objetivo como comunidad
+por ejemplo:
+quiero optimizar payback y que los coeficientes sean fijos
+quiero optimizar el surplus y que los coefs sean dinámicos
+balance de hippiesmo y capitalismo
+flexibilidad de riesgo, cuanto riesgo estamos dispuestos a asumir
+
+
+

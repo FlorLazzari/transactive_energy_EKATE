@@ -1,4 +1,4 @@
-############################# data reading #############################
+############################# read data #############################
 
 import_data_generation <- function(filename_gen, selected_year_generation, time_format){
   df_gen <- read.csv(file = filename_gen, header = TRUE)
@@ -21,22 +21,6 @@ import_data_consumption <- function(filename_cons, selected_year_consumption, ti
 }
 
 
-import_one_user <- function(filename_1){
-  df <- read.csv(file = filename_1, header = TRUE)
-  colnames(df) <- c("time", "energy")
-  df$time <- as.POSIXct(as.character(df$time), format = "%d-%m-%Y %H:%M", tz = "Europe/Madrid") 
-  return(df)
-}
-
-
-import_data_inergy <- function(filename_1){
-  df <- read.csv(file = filename_1, header = TRUE, sep = ";")
-  colnames(df) <- c("id", "tariff", "time", "energy")
-  df$time <- as.POSIXct(as.character(df$time), format = "%d/%m/%Y %H:%M", tz = "Europe/Madrid") 
-  return(df)
-}
-
-
 import_data_price <- function(filename_price){
   # df_purchase_price_one_day = data.frame("price" = c(rep(0.15,8), rep(0.18,2), rep(0.26,4), rep(0.15,4), rep(0.26,4), rep(0.18,2)),
   #                                        "time" = c(0:23))
@@ -52,6 +36,9 @@ import_data_investment <- function(filename_investments){
   df <- read.csv(file = filename_investments, header = TRUE)
   return(df)
 }
+
+
+############################# clean data #############################
 
   
 clean_specific_data_consumption <- function(need_cleaning = F, meter = 0){  
@@ -97,26 +84,6 @@ clean_specific_data_consumption <- function(need_cleaning = F, meter = 0){
 }
 
 
-select_month <- function(df, m=6){
-  
-  # select only a random month just to start:
-  dates = seq(from = as.Date(paste0("2019-", as.character(m), "-01")), to = as.Date(paste0("2019-", as.character(m+1), "-01")), by = "day")
-  
-  # df_month_1 <- df[as.Date(df$time) %in% dates, ]
-  df_month_1 = df[[1]][as.Date(df[[1]]$time) %in% dates, ]
-  colnames(df_month_1)[2] = "gen_1"
-  
-  vector_colnames = paste0("cons_", 1:(length(df)-1))
-  
-  for (i in 2:length(df)) {
-    df_month_1 <- merge(df_month_1, df[[i]], by = "time")
-    colnames(df_month_1)[i+1] = vector_colnames[i-1]
-  }
-  
-  return(df_month_1)
-}
-
-
 eliminate_outliers <- function(df, max_cut=160){
   df_mod = df
   df_mod[df_mod > max_cut] = NA
@@ -125,30 +92,14 @@ eliminate_outliers <- function(df, max_cut=160){
 }
 
 
-reducing_consumption_fake <- function(df){
-  
-  max_gen = max(df$gen_1, na.rm = T)
-  
-  cols_high = unique(ceiling(which(df > max_gen)/nrow(df_month_1)))
-  cols_high = cols_high[-1]
-  
-  df[,cols_high] = df[,cols_high]/3  
-  
-  return(df)
+filter_flat_curves <- function(df_cons_characteristic){
+  filter = colSums(apply(X = df_cons_characteristic, MARGIN = 2, FUN = diff) == 0)
+  df_cons_characteristic_filtered = df_cons_characteristic[ ,filter < nrow(df_cons_characteristic)*0.1]
+  return(df_cons_characteristic_filtered)
 }
 
 
-remove_cero_values <- function(df_gen_raw){
-  df_gen_raw$gen[df_gen_raw$gen == 0] = NA
-  df_gen = df_gen_raw
-  return(df_gen)
-}
-
-
-cut_selected_days <- function(df_gen_raw, selected_year_generation){
-  df_gen = df_gen_raw[as.Date(df_gen_raw$time) %in% as.Date(selected_year_generation), ]
-  return(df_gen)
-}
+############################# characteristic curves #############################
 
 
 define_local_time_gen <- function(selected_year_generation){
@@ -174,22 +125,11 @@ solve_local_time_problems <- function(df_raw, hours_to_remove = "2020-10-25 02:0
 }
 
 
-generate_sunny <- function(df_local_time_gen, df_gen){
-  df_local_time_gen$sunny = !is.na(df_gen$gen)
-  return(df_local_time_gen)
-}
-
-
-cut_sunny<- function(df_local_time_gen, df_gen){
-  df_gen = df_gen[df_local_time_gen$sunny,]
-  return(df_gen)
-}
-
-
 create_local_time_characteristic <- function(number_selected_year){
   df_calendar = data.frame("month" = sort(rep(c(1:12), 24*2)),
                            "week" = rep(c(rep(F, 24), rep(T, 24)), 12),
                            "hour" = rep(rep(0:23), 24))
+  
   
   df_months_stats = calculate_months_stats(number_selected_year)
   df_local_time = merge(x = df_calendar, y = df_months_stats, by = c("month", "week","hour"))
@@ -199,21 +139,150 @@ create_local_time_characteristic <- function(number_selected_year){
 }
 
 
-filter_flat_curves <- function(df_cons_characteristic){
-  filter = colSums(apply(X = df_cons_characteristic, MARGIN = 2, FUN = diff) == 0)
-  df_cons_characteristic_filtered = df_cons_characteristic[ ,filter < nrow(df_cons_characteristic)*0.1]
-  return(df_cons_characteristic_filtered)
+calculate_characteristic_days_cons <- function(df, number_selected_year){
+  
+  df_characteristic = data.frame("month" = sort(rep(c(1:12), 24*2)),
+                                 "week" = rep(c(rep(F, 24), rep(T, 24)), 12),
+                                 "hour" = rep(rep(0:23), 24))
+  
+  for (i in 2:ncol(df)) {
+    # print(i)
+    list_meter_characteristic = calculate_characteristic_days_2(df = df[, c(1, i)], number_selected_year)  
+    # will discard the users that have any month without characteristic data
+    # if (any(is.na(list_meter_characteristic))) {
+    #   # print("no")
+    # } else{
+    df_characteristic_i = dplyr::bind_rows(list_meter_characteristic, .id = "month")
+    df_characteristic = merge(df_characteristic, df_characteristic_i, by = c("month", "week", "hour"))
+    colnames(df_characteristic)[ncol(df_characteristic)] = paste0("cons_",ncol(df_characteristic)-1)
+    # }
+  } 
+  
+  colnames(df_characteristic)[4:ncol(df_characteristic)] = colnames(df)[2:ncol(df)]
+  
+  return(df_characteristic)
 }
 
 
-select_n_users <- function(df_cons_characteristic_filtered, n_users){
-  df_cons = df_cons_characteristic_filtered[, grep(pattern = "cons", x = colnames(df_cons_characteristic_filtered))[1:n_users]]  
-  return(df_cons)
+calculate_characteristic_days_gen <- function(df, number_selected_year){
+  
+  colnames(df) = c("time", "energy")
+  df_characteristic = list()
+  for (m in 1:12) {
+    
+    # m = 1
+    if (m < 11) {
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
+    }else{
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year+1),"-",1,"-01")), by = "day")      
+    }
+    
+    days_month = days_month[-length(days_month)]
+    
+    ##
+    
+    df_mean = data.frame("week" = T, "hour" = 0:23, "energy" = NA)
+    
+    df_month = df[as.Date(df$time) %in% days_month, ]
+    df_month_clean = df_month[!is.na(df_month$energy), ]
+    
+    
+    if((any(!(0:23 %in% unique(hour(df_month_clean$time))) ))) {
+      
+      df_characteristic[[m]] = NA
+      
+    }else{
+      
+      df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean = df_mean
+      
+      df_mean_end_week = df_mean
+      df_mean_end_week$week = F
+      
+      df_characteristic[[m]] = rbind(df_mean_end_week, df_mean)
+    }
+  }
+  
+  df_characteristic = dplyr::bind_rows(df_characteristic, .id = "column_label")
+  colnames(df_characteristic)[1] = "month"
+  
+  return(df_characteristic)
 }
 
 
 
-############################# operative #############################
+############################# select_users #############################
+
+
+calculate_n_community <- function(community_objective = "novel", generation, consumption){
+  
+  # minimum self consumption: 0.2?
+  # TODO: a small problem when the peak is a platau
+  
+  # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
+  # max_insolation_hours = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = which.max)
+  
+  # generation_smooth = as.numeric(stats::smooth(generation, "3RSR"))
+  
+  first_derivative = sign(diff(generation))
+  peak_insolation_hours = (diff(first_derivative) == -2)
+  
+  high_insolation_hours = max(generation, na.rm = T)/2 < generation  
+  
+  # completing borders:
+  peak_insolation_hours = c(T, peak_insolation_hours, T)
+  max_insolation_hours = peak_insolation_hours & high_insolation_hours
+  
+  # checking:
+  # peaks = generation
+  # peaks[!max_insolation_hours] = NA
+  # plot(generation, type = "l")
+  # points(peaks)
+  
+  # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation_smooth[max_insolation_hours])))
+  
+  individual_self_sufficiency = colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours], na.rm = T)  
+  individual_self_sufficiency_quantiles = quantile(individual_self_sufficiency, na.rm = T)
+  
+  # the stat we choose depends on our objective
+  
+  if (community_objective == "environmental"){
+    # community_objective = only environmental (we want all the energy to be consumed)
+    
+    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[2])
+    n_community = 1/individual_self_sufficiency_stat
+    n_community = ceiling(n_community) 
+    
+  } else if (community_objective == "profitable"){
+    # community_objective = only profitability (we want all the participants to have low payback)    
+    
+    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[4])
+    n_community = 1/individual_self_sufficiency_stat
+    n_community = floor(n_community) 
+    
+  } else if (community_objective == "novel"){
+    # community_objective = only profitability (we want all the participants to have low payback)    
+    
+    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[3])
+    n_community = 1/individual_self_sufficiency_stat
+    n_community = round(n_community) 
+  } else {
+    print("Error --- misspelled")
+    n_community = 0 
+  }
+  
+  # hist(individual_self_sufficiency)
+  # mean(individual_self_sufficiency)
+  
+  if (n_community>ncol(consumption)) {
+    print(paste("Warning --- optimal n_community =",n_community))
+    n_community = ncol(consumption)
+  }
+  return(n_community)
+}
 
 
 order_consumers <- function(df_cons_characteristic_sunny, df_gen_characteristic_sunny){
@@ -230,6 +299,90 @@ order_consumers <- function(df_cons_characteristic_sunny, df_gen_characteristic_
   
   return(df_cons_characteristic_sunny_ordered)
 }
+
+
+optimize_combination <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, weights_n_days, max_iter){
+  
+  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
+  
+  dim_search_ga = 600
+  
+  optim_results <- GA::ga(type = "binary", fitness = fitness_combination, 
+                          nBits = n_binary_rep*n_community,
+                          n_community = n_community, df_gen_to_optimize = df_gen_to_optimize, df_cons_to_optimize = df_cons_to_optimize, n_binary_rep = n_binary_rep, weights_n_days = weights_n_days,  
+                          # popSize = 100, maxiter = 1000, run = 100)
+                          popSize = dim_search_ga, 
+                          # maxiter = 400, run = 50,
+                          maxiter = max_iter,
+                          crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
+                          # keepBest = T,
+                          pmutation = 0.7
+  )
+  
+  solutions = optim_results@solution
+  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
+  combinations = combinations[!duplicated(combinations), ]
+  
+  return(combinations)
+}
+
+
+fitness_combination <- function(x, n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, weights_n_days){
+  
+  # tests -> lower number, bigger number:
+  # x = rep(0, n_binary_rep*n_community)
+  # x = rep(1, n_binary_rep*n_community)
+  # x = x_solution[1, ]
+  # x = round(runif(nBits, 0, 1))
+  
+  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize)
+  
+  weighted_surplus = weights_n_days * calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize)
+  surplus = sum(weighted_surplus, na.rm = T)
+  
+  # surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
+  score <- surplus
+  
+  # surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
+  
+  return(-score)
+}
+
+
+calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep,  df_cons){
+  
+  combination = rep(0, ncol(df_cons))
+  
+  for (j in 1:n_community) {
+    user = binary2decimal(x[((j-1)*n_binary_rep + 1):(j*n_binary_rep)]) + 1  
+    # print(user)
+    combination[user] = 1
+  }
+  return(combination)
+}
+
+
+calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
+  
+  # df_cons_selected = df_cons_to_optimize
+  df_cons_selected = df_cons
+  
+  not_selected_cons = (combination == 0) 
+  df_cons_selected[, not_selected_cons] = 0
+  
+  df_cons_community = as.numeric(rowSums(df_cons_selected))
+  
+  community_hourly_surplus <- df_gen - df_cons_community
+  community_hourly_surplus[community_hourly_surplus < 0] = 0
+  
+  
+  return(community_hourly_surplus)
+}
+
+############################# operative #############################
+
+
 
 
 calculate_self_suff_and_cons <- function(matrix_coefficients, df_gen_sunny, df_cons_selected_sunny, df_cons_selected_users, df_local_time){
@@ -387,69 +540,6 @@ calculate_gen_assigned <- function(df_gen, combination){
 }
 
 
-optimization_1 <- function(hourly, n_community, n_binary_rep, df_gen, df_cons){
-  
-  # if (hourly == T) {
-  #   fitness = fitness_1_betas
-  # } else{
-  #   fitness = fitness_1
-  # }
-  
-  dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  
-  dim_search_ga = 600
-  
-  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
-                      nBits = n_binary_rep*n_community,
-                      n_community = n_community, df_gen = df_gen, df_cons = df_cons, n_binary_rep = n_binary_rep,  
-                      # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = dim_search_ga, maxiter = 400, run = 50,
-                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
-                      keepBest = T,
-                      pmutation = 0.7
-  )
-  
-  # TODO: understand: popSize should be simmilar to the combinatorial??
-  # look for: relation between popSize and dimension of the space (number of possible combinations) 
-  # TODO: work a better crossover, now is being done a uCrossover in "pieces"
-  # TODO: check how are the bestSolutions found
-  x_solution = optim_results@bestSol
-  
-  x_solution = as.vector(unlist(x_solution))
-  n_solutions = length(x_solution)/(n_binary_rep * n_community)
-  factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
-  solutions = t(as.data.frame(split(x = x_solution, f = factor)))
-  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons))
-  
-  # combinations are repeated in the cases, for example: 
-  # combinations = ( 3 -- 2 -- 1) or (1 -- 2 -- 3)
-  # combinations = ( 3 -- 3 -- 1) or (1 -- 1 -- 3)
-  # the difference is due to the repetition:
-  # combinatorics counting as different elements to the repeted elements: n! / (n-p)!               CASE1: the search space of the GA 
-  # combinatorics without counting as different elements to the repeted elements: n! / p! (n-p)!    CASE2: the useful solutions for us 
-  # if p! is big => the differences between combinations_complete and combinations will tend to be bigger 
-  
-  # the important number is: how many are we loosing by implementig the algo in this way??
-  combinations_complete = combinations
-  combinations = combinations[!duplicated(combinations), ]
-  
-  surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen, df_cons = df_cons))
-  
-  surplus_ordered = surplus[order(surplus)]
-  # hist(surplus_ordered)
-  # q_05 = quantile(x = surplus_ordered, probs = 0.5)
-  # surplus_ordered_filtered = surplus_ordered[surplus_ordered < q_05]
-  
-  n_filter = min(50,length(surplus_ordered))
-  surplus_ordered_filtered = surplus_ordered[1:n_filter]
-  
-  combinations_ordered = combinations[order(surplus), ]
-  # combinations_ordered_filtered = combinations[surplus_ordered < q_05, ]
-  combinations_ordered_filtered = combinations_ordered[1:n_filter, ]
-  
-  return(combinations_ordered_filtered)
-}
 
 
 # TODO: study more about crossovers and elaborate a better one
@@ -469,173 +559,13 @@ bee_uCrossover_binary <- function(object, parents, n_binary_rep, n_community){
 }
 
 
-# optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize){
-#   
-#   dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-#   dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-#   
-#   dim_search_ga = 600
-#   
-#   optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
-#                       nBits = n_binary_rep*n_community,
-#                       n_community = n_community, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
-#                       # popSize = 100, maxiter = 1000, run = 100)
-#                       popSize = dim_search_ga, maxiter = 400, run = 50,
-#                       crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
-#                       pmutation = 0.7
-#   )
-#   
-#   x_solution = optim_results@solution
-#   
-#   # x_solution = as.vector(unlist(x_solution))
-#   # n_solutions = length(x_solution)/(n_binary_rep * n_community)
-#   # factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
-#   # solutions = t(as.data.frame(split(x = x_solution, f = factor)))
-#   # combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
-#   
-#   combinations = t(apply(X = as.matrix(x_solution), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
-#   
-#   # the important number is: how many are we loosing by implementig the algo in this way??
-#   combinations_complete = combinations
-#   combinations = combinations[!duplicated(combinations), ]
-#   
-#   # surplus_ordered = surplus[order(surplus)]
-#   # hist(surplus_ordered)
-#   # q_05 = quantile(x = surplus_ordered, probs = 0.5)
-#   # surplus_ordered_filtered = surplus_ordered[surplus_ordered < q_05]
-#   
-#   # n_filter = min(50,length(surplus_ordered))
-#   # surplus_ordered_filtered = surplus_ordered[1:n_filter]
-#   
-#   # combinations_ordered = combinations[order(surplus), ]
-#   # combinations_ordered_filtered = combinations[surplus_ordered < q_05, ]
-#   # combinations_ordered_filtered = combinations_ordered[1:n_filter, ]
-#   
-#   return(combinations)
-# }
 
 
-optimization_1_to_analize <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, max_iter){
-  
-  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-  
-  dim_search_ga = 600
-  
-  optim_results <- GA::ga(type = "binary", fitness = fitness_1_betas, 
-                          nBits = n_binary_rep*n_community,
-                          n_community = n_community, df_gen_to_optimize = df_gen_to_optimize, df_cons_to_optimize = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
-                          # popSize = 100, maxiter = 1000, run = 100)
-                          popSize = dim_search_ga, 
-                          # maxiter = 400, run = 50,
-                          maxiter = max_iter,
-                          crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
-                          # keepBest = T,
-                          pmutation = 0.7
-  )
-  
-  solutions = optim_results@solution
-  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
-  combinations = combinations[!duplicated(combinations), ]
-  
-  return(combinations)
-}
 
 
-optimization_1_to_analize_convergence <- function(n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize, max_run){
-  
-  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons_to_optimize), m = n_community) * factorial(n_community)
-  dim_search_ga = 600
-  
-  tic = Sys.time()
-  optim_results <- ga(type = "binary", fitness = fitness_1_betas, 
-                      nBits = n_binary_rep*n_community,
-                      n_community = n_community, df_gen_to_optimize = df_gen_to_optimize, df_cons_to_optimize = df_cons_to_optimize, n_binary_rep = n_binary_rep,  
-                      # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = dim_search_ga, 
-                      maxiter = 400, 
-                      run = max_run,
-                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep, n_community = n_community), 
-                      keepBest = T,
-                      pmutation = 0.7
-  )
-  toc = Sys.time()
-  time = toc-tic
-  
-  solutions = optim_results@solution
-  selected_combination = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
-  
-  x_solution = optim_results@bestSol
-  # I had problems with this => changed to the transpose solution
-  # x_solution = as.vector(unlist(x_solution))
-  x_solution = lapply(X = x_solution, FUN = t)
-  x_solution = as.vector(unlist(x_solution, recursive = F))
-  n_solutions = length(x_solution)/(n_binary_rep * n_community)
-  factor = as.factor(rep(c(1:n_solutions), n_binary_rep * n_community)[order(rep(c(1:n_solutions), n_binary_rep * n_community))])
-  solutions = t(as.data.frame(split(x = x_solution, f = factor)))
-  best_combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize))
-  
-  return(list("best_combinations" = best_combinations, "selected_combination" = selected_combination, "time" = time))
-}
 
 
-optimization_1_boxes <- function(n_community, n_binary_rep_box, list_box_season, df_gen_to_optimize, df_cons_to_optimize){
-  
-  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  # dim_search_solution = factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)
-  
-  dim_search_ga = 600
-  optim_results <- ga(type = "binary", fitness = fitness_1_betas_boxes, 
-                      nBits = n_binary_rep_box*n_community,
-                      n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize,    
-                      # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = dim_search_ga, maxiter = 400, run = 20,
-                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep_box, n_community = n_community), 
-                      # keepBest = T,
-                      pmutation = 0.7
-  )
-  
-  # bestSol if keepBest = TRUE, the best solutions at each iteration
-  # keeps the 50 best solutions for every iteration
-  # without using keepBest then I only see the 50 best for the last iteration
-  
-  solutions = optim_results@solution
-  combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary_boxes, n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons_to_optimize))
-  
-  return(combinations)
-}
 
-
-optimization_1_boxes_to_analize_convergence <- function(n_community, n_binary_rep_box, list_box_season, df_gen_to_optimize, df_cons_to_optimize){
-  
-  # dim_search_ga = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  # dim_search_solution = calculate_combinatorics(n = ncol(df_cons), m = n_community) * factorial(n_community)
-  # dim_search_solution = factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)*factorial(8)
-  
-  dim_search_ga = 600
-  optim_results <- ga(type = "binary", fitness = fitness_1_betas_boxes, 
-                      nBits = n_binary_rep_box*n_community,
-                      n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize,    
-                      # popSize = 100, maxiter = 1000, run = 100)
-                      popSize = dim_search_ga, maxiter = 400, run = 20,
-                      crossover = purrr::partial(bee_uCrossover_binary, n_binary_rep = n_binary_rep_box, n_community = n_community), 
-                      keepBest = T,
-                      pmutation = 0.7
-  )
-  
-  # bestSol if keepBest = TRUE, the best solutions at each iteration
-  # keeps the 50 best solutions for every iteration
-  # without using keepBest then I only see the 50 best for the last iteration
-  solutions = optim_results@bestSol
-  solutions = data.frame(matrix(unlist(solutions), nrow=length(solutions), byrow=TRUE))
-  
-  # solutions = optim_results@solution
-  best_combinations = t(apply(X = as.matrix(solutions), MARGIN = 1, FUN = calculate_combination_for_GA_binary_boxes, n_community = n_community, n_binary_rep_box = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons))
-  
-  return(best_combinations)
-}
 
 
 nsga2R_flor <- function (fn, varNo, objDim, lowerBounds = rep(-Inf, varNo), 
@@ -986,61 +916,6 @@ complete_consumption <- function(df_cons_characteristic_sunny, n_binary_rep){
 ############################# fitness #############################
 
 
-fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen_to_optimize, df_cons_to_optimize){
-  
-  # tests -> lower number, bigger number:
-  # x = rep(0, n_binary_rep*n_community)
-  # x = rep(1, n_binary_rep*n_community)
-  # x = x_solution[1, ]
-  # x = round(runif(nBits, 0, 1))
-  
-  combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize)
-  
-  # TODO: should change this SUM by a WEIGHTED SUM 
-  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize), na.rm = T)
-
-  # surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
-  score <- surplus
-  
-  # surplus = colSums(apply(X = as.matrix(combinations), MARGIN = 1, FUN = calculate_surplus_hourly_community, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
-  
-  return(-score)
-}
-
-
-fitness_1_betas_boxes <- function(x, n_community, n_binary_rep_box, list_box_season, df_gen, df_cons){
-  
-  # tests -> lower number, bigger number:
-  # x = rep(0, n_binary_rep_box*n_community)
-  # x = rep(1, n_binary_rep_box*n_community)
-  # x = c(ifelse(pracma::rand(n = 1, m = n_binary_rep_box*n_community) > 0.5, 1, 0))
-  
-  combination = calculate_combination_for_GA_binary_boxes(x = x, n_community = n_community, n_binary_rep = n_binary_rep_box, list_box_season = list_box_season, df_cons = df_cons)
-  
-  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen, df_cons = df_cons))
-  score <- surplus
-  
-  return(-score)
-}
-
-
-calculate_combination_for_GA_binary_boxes <- function(x, n_community, n_binary_rep_box, list_box_season, df_cons){
-  
-  combination = rep(0, ncol(df_cons))
-  
-  # TODO: change this so it doesnt have to check inside the boxes:
-  for (j in 1:n_community) {
-    # j = 1
-    binary_user_inside_box = GA::gray2binary(x[((j-1)*n_binary_rep_box + 1):(j*n_binary_rep_box)])   
-    user_inside_box = GA::binary2decimal(binary_user_inside_box) + 1
-    user = list_box_season[[j]][user_inside_box] 
-    user_number = as.numeric(gsub(x = user, pattern = "cons_", replacement = ""))
-    combination[user_number] = 1
-  }
-  return(combination)
-}
-
-
 # TODO: change by purchase_price_sunny everywhere!
 fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
   
@@ -1124,103 +999,6 @@ fitness_MO <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_s
 }
 
 
-# fitness_MO_quantos <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
-#   
-#   # checking:
-#   # fitness_MO(runif(dim, 0, 1),
-#   #            df_gen_day = df_gen_day,
-#   #            df_cons_selected_day = df_cons_selected_day,
-#   #            individual_investment_selected = individual_investment_selected)
-#   
-#   # fn: the fitness function to be minimized
-#   # varNo: Number of decision variables
-#   # objDim: Number of objective functions
-#   # lowerBounds: Lower bounds of each decision variable
-#   # upperBounds: Upper bounds of each decision variable
-#   # popSize: Size of solution(?) population
-#   # generations: Number of generations
-#   # cprob: crossover prob
-#   # mprob: mutation prob
-#   
-#   coefficients_x = matrix(data = 0, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-#   coefficients_x_row = table(c(1:n_community))
-#   n_size = 25
-#   
-#   for (i in 1:n_sunny_hours) {
-#     coefficients_x_row[] = 0
-#     # this will be generated by the GA:
-#     x = sample.int(n = n_community, size = n_size, replace = T)
-#     each_space = 1/n_size
-#     coefficients_x_row_table = table(x)
-#     coefficients_x_row[(names(coefficients_x_row) %in% names(coefficients_x_row_table))] = coefficients_x_row_table
-#     coefficients_x_row = coefficients_x_row*each_space
-#     coefficients_x[i,] = as.numeric(coefficients_x_row)
-#   }
-# 
-#   # checking:
-#   rowSums(coefficients_x)
-#   
-#   n_sunny_hours = nrow(df_cons_selected_sunny)
-#   n_community = ncol(df_cons_selected_sunny)
-#   
-#   coefficients_x = matrix(data = x, ncol = n_community, nrow = n_sunny_hours, byrow = T)
-#   coefficients_x = coefficients_x/rowSums(coefficients_x)
-#   
-#   df_gen_assigned = calculate_gen_assigned_betas(df_gen_sunny, matrix_coefficients = coefficients_x)
-#   
-#   surplus_x <- df_gen_assigned - df_cons_selected_sunny
-#   surplus_x[surplus_x < 0] = 0
-#   
-#   # TODO:
-#   f1_surplus = sum(surplus_x)
-#   
-#   # changed this:
-#   # purchase_price = 0.14859
-#   # purchase_price = c(0.14859, 0.14859, 0.14859, 
-#   #                    0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 0.14859*1.5, 
-#   #                    0.14859*1.2, 0.14859*1.2, 0.14859*1.2, 0.14859*1.2,
-#   #                    0.14859*1.5) 
-#   sale_price = 0.0508
-#   
-#   cost_old = colSums(purchase_price_sunny*df_cons_selected_sunny)
-#   
-#   grid_x = df_cons_selected_sunny - df_gen_assigned
-#   grid_x[grid_x < 0] = 0
-#   
-#   surplus_x_to_sell = ifelse(colSums(surplus_x) < colSums(grid_x), colSums(surplus_x), colSums(grid_x))
-#   
-#   # changed this: 
-#   # cost_sun = purchase_price*colSums(grid_x) - sale_price * surplus_x_to_sell
-#   cost_sun = colSums(purchase_price_sunny*grid_x) - sale_price * surplus_x_to_sell
-#   
-#   # assuming period is a DAY
-#   profit_period = cost_old - cost_sun
-#   profit_one_year = profit_period * 360 
-#   
-#   
-#   ##### TODO PAYBACK
-#   payback_years = individual_investment_selected / profit_one_year 
-#   
-#   # TODO:
-#   payback_years[is.na(payback_years)] = 10
-#   payback_years[payback_years > 50] = 10
-#   
-#   payback_ideal = 0
-#   # TODO:
-#   f2_payback = sum(exp(payback_years - payback_ideal))
-#   
-#   # f2_payback = sd(payback_years)
-#   
-#   # TODO: add something like this
-#   # cost_payback_2 = max(payback_years) - min(payback_years) 
-#   
-#   # score <- weight_surplus * cost_surplus + (1-weight_surplus) * cost_payback
-#   
-#   
-#   # return(c(-f1_surplus, -f2_payback))
-#   # took the minus sign because the optimization algo is set to minimize:
-#   return(c(f1_surplus, f2_payback))
-# }
 
 
 fitness_MO_constraint <- function(x, df_gen_sunny, df_cons_selected_sunny, purchase_price_sunny, individual_investment_selected){
@@ -4380,7 +4158,7 @@ plot_energy_time_week <- function(name, print_plots, binary_week = T, df_cons_ch
     df_cons_characteristic_week = df_cons_characteristic[df_cons_characteristic$week == binary_week, c("month", "hour", cons_to_plot)]
     
     df_plot = df_cons_characteristic_week
-    df_plot = melt(df_plot, id.vars = c("hour", "month"))
+    df_plot = reshape2::melt(df_plot, id.vars = c("hour", "month"))
     
     df_plot$month = as.factor(df_plot$month)
     levels(df_plot$month) = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec") 
@@ -4432,74 +4210,6 @@ plot_energy_time_week_selected <- function(name, print_plots, df_cons_characteri
 
 
 ############################# AUX - main #############################
-
-
-calculate_n_community <- function(community_objective = "novel", generation, consumption){
-  
-  # minimum self consumption: 0.2?
-  # TODO: a small problem when the peak is a platau
-  
-  # max_insolation = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = max)
-  # max_insolation_hours = aggregate(x = df[[1]]$energy, by = list(date(df[[1]]$time)), FUN = which.max)
-  
-  # generation_smooth = as.numeric(stats::smooth(generation, "3RSR"))
-  
-  first_derivative = sign(diff(generation))
-  peak_insolation_hours = (diff(first_derivative) == -2)
-  
-  high_insolation_hours = max(generation, na.rm = T)/2 < generation  
-  
-  # completing borders:
-  peak_insolation_hours = c(T, peak_insolation_hours, T)
-  max_insolation_hours = peak_insolation_hours & high_insolation_hours
-  
-  # checking:
-  # peaks = generation
-  # peaks[!max_insolation_hours] = NA
-  # plot(generation, type = "l")
-  # points(peaks)
-  
-  # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation_smooth[max_insolation_hours])))
-
-  individual_self_sufficiency = colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours], na.rm = T)  
-  individual_self_sufficiency_quantiles = quantile(individual_self_sufficiency, na.rm = T)
-
-  # the stat we choose depends on our objective
-
-  if (community_objective == "environmental"){
-    # community_objective = only environmental (we want all the energy to be consumed)
-    
-    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[2])
-    n_community = 1/individual_self_sufficiency_stat
-    n_community = ceiling(n_community) 
-
-    } else if (community_objective == "profitable"){
-    # community_objective = only profitability (we want all the participants to have low payback)    
-
-    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[4])
-    n_community = 1/individual_self_sufficiency_stat
-    n_community = floor(n_community) 
-    
-    } else if (community_objective == "novel"){
-    # community_objective = only profitability (we want all the participants to have low payback)    
-    
-    individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[3])
-    n_community = 1/individual_self_sufficiency_stat
-    n_community = round(n_community) 
-    } else {
-    print("Error --- misspelled")
-    n_community = 0 
-  }
-
-  # hist(individual_self_sufficiency)
-  # mean(individual_self_sufficiency)
-  
-  if (n_community>ncol(consumption)) {
-    print(paste("Warning --- optimal n_community =",n_community))
-    n_community = ncol(consumption)
-  }
-  return(n_community)
-}
 
 
 select_best_combinations_betas <- function(optimal_combination_using_2_GAs){
@@ -4675,78 +4385,8 @@ calculate_months_stats <- function(number_selected_year){
 }
 
 
-calculate_characteristic_days_cons <- function(df, number_selected_year){
-
-  df_characteristic = data.frame("month" = sort(rep(c(1:12), 24*2)),
-                           "week" = rep(c(rep(F, 24), rep(T, 24)), 12),
-                           "hour" = rep(rep(0:23), 24))
-  
-  for (i in 2:ncol(df)) {
-    # print(i)
-    list_meter_characteristic = calculate_characteristic_days_2(df = df[, c(1, i)], number_selected_year)  
-    # will discard the users that have any month without characteristic data
-    # if (any(is.na(list_meter_characteristic))) {
-    #   # print("no")
-    # } else{
-      df_characteristic_i = dplyr::bind_rows(list_meter_characteristic, .id = "month")
-      df_characteristic = merge(df_characteristic, df_characteristic_i, by = c("month", "week", "hour"))
-      colnames(df_characteristic)[ncol(df_characteristic)] = paste0("cons_",ncol(df_characteristic)-1)
-    # }
-  } 
-  
-  colnames(df_characteristic)[4:ncol(df_characteristic)] = colnames(df)[2:ncol(df)]
-  
-  return(df_characteristic)
-}
 
 
-calculate_characteristic_days_gen <- function(df, number_selected_year){
-  
-  colnames(df) = c("time", "energy")
-  df_characteristic = list()
-  for (m in 1:12) {
-    
-    # m = 1
-    if (m < 11) {
-      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
-    }else{
-      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year+1),"-",1,"-01")), by = "day")      
-    }
-    
-    days_month = days_month[-length(days_month)]
-    
-    ##
-    
-    df_mean = data.frame("week" = T, "hour" = 0:23, "energy" = NA)
-    
-    df_month = df[as.Date(df$time) %in% days_month, ]
-    df_month_clean = df_month[!is.na(df_month$energy), ]
-    
-
-    if((any(!(0:23 %in% unique(hour(df_month_clean$time))) ))) {
-      
-      df_characteristic[[m]] = NA
-      
-    }else{
-      
-      df_mean_incomplete = aggregate(df_month_clean$energy, by = list(hour(df_month_clean$time)), FUN = mean)
-      colnames(df_mean_incomplete) = c("hour", "energy")
-      
-      df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
-      df_mean = df_mean
-      
-      df_mean_end_week = df_mean
-      df_mean_end_week$week = F
-      
-      df_characteristic[[m]] = rbind(df_mean_end_week, df_mean)
-    }
-  }
-  
-  df_characteristic = dplyr::bind_rows(df_characteristic, .id = "column_label")
-  colnames(df_characteristic)[1] = "month"
-
-  return(df_characteristic)
-}
 
 
 calculate_characteristic_days_years <- function(df_gen_complete, years){
@@ -5007,18 +4647,6 @@ define_smart_order <- function(df_cons, df_gen, df_local_time, n_community){
 ############################# AUX - operative #############################
 
 
-calculate_combination_for_GA_binary <- function(x, n_community, n_binary_rep,  df_cons){
-  
-  combination = rep(0, ncol(df_cons))
-  
-  for (j in 1:n_community) {
-    user = binary2decimal(x[((j-1)*n_binary_rep + 1):(j*n_binary_rep)]) + 1  
-    # print(user)
-    combination[user] = 1
-  }
-  return(combination)
-}
-
 
 calculate_individual_investment <- function(combination, global_investment, individual_investment_max){
   
@@ -5047,22 +4675,6 @@ calculate_gen_assigned_betas <- function(df_gen_day, matrix_coefficients){
 }
 
 
-calculate_surplus_hourly_community <- function(combination, df_gen, df_cons){
-  
-  # df_cons_selected = df_cons_to_optimize
-  df_cons_selected = df_cons
-  
-  not_selected_cons = (combination == 0) 
-  df_cons_selected[, not_selected_cons] = 0
-  
-  df_cons_community = as.numeric(rowSums(df_cons_selected))
-  
-  community_hourly_surplus <- df_gen - df_cons_community
-  community_hourly_surplus[community_hourly_surplus < 0] = 0
-  
-    
-  return(community_hourly_surplus)
-}
 
 
 calculate_payback_betas <- function(purchase_price_sunny, df_cons_selected_sunny, df_gen_sunny, individual_investment, matrix_coefficients){

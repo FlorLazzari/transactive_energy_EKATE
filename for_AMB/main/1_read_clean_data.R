@@ -20,7 +20,6 @@
 #   4.2) clean 
 #   4.3) define characteristic dayS for each month (naive - using hourly mean)
 #   4.4) filter consumers  
-#   4.5) select sunny hours  
 
 # 5) INDIVIDUAL INVESTMENTS
 #   5.1) read  
@@ -31,9 +30,10 @@
 #   6.2) select sunny hours
 
 # 7) OUTPUT  
-#   7.1) save  
+#   7.1) merge info
+#   7.2) save  
 
-# 6 checking instances:
+# checking instances:
 # if (print_plots == T) => plots will be generated in the directory .../graphs
 
 ############ 1) REQUESTED INPUTS ############
@@ -65,6 +65,7 @@ filename_price = "data/price_data.csv"
 
 library(lubridate)
 library(ggplot2)
+library(reshape2)
 source("functions.R")
 
 
@@ -94,14 +95,20 @@ df_gen_characteristic = calculate_characteristic_days_gen(df = df_gen, number_se
 # checking instance: plots cleaned electricity generated vs time 
 plot_energy_time(name = paste0("generation_characteristic_(version",version,")"), print_plots, data.frame("time" = 1:nrow(df_gen_characteristic), "energy" = df_gen_characteristic$energy))
 
+#### 2.4) select sunny hours ####  
+df_gen_characteristic$sunny = df_gen_characteristic$energy != 0
+
+# checking instance: plots characteristic electricity consumed vs time (of cons_to_plot) 
+# plot_energy_time(name = paste0("consumption_characteristic_sunny_(version",version,")"), print_plots, data.frame("time" = 1:nrow(df_cons_characteristic), "energy" = df_cons_characteristic$sunny[cons_to_plot]))
+
 
 ############ 3) PV INSTALLATION COST ############
 
-#### 3.1) read 
+#### 3.1) read ####
 filename_instal_cost = "data/PV_instal_cost_data.csv"
 # TODO: write this info in the ".csv"
 selected_year_generation = seq(from = as.POSIXct("2020-01-01 00:00:00"), to = as.POSIXct("2020-12-31 00:00:00"), by = "hour")
-df_instal_cost = max(df_gen_characteristic_sunny, na.rm = T)*1100
+df_instal_cost = max(df_gen_characteristic$energy, na.rm = T)*1100
 
 
 ############ 4) CONSUMPTION ############
@@ -152,38 +159,17 @@ df_purchase_price = import_data_price(filename_price)
 df_purchase_price_sunny = df_purchase_price[(df_gen_characteristic != 0), "price"]
 
 
-############ 6) LOCAL TIME ############ 
-
-df_local_time_characteristic = create_local_time_characteristic(number_selected_year = unique(year(selected_year_consumption)))
-
-
-############ 7) ADD SUNNY VARIABLE ############ 
-
-df_gen_characteristic$sunny = df_gen_characteristic$energy != 0
-# checking instance: plots characteristic generation vs time 
-# plot_energy_time(name = paste0("generation_characteristic_sunny_(version",version,")"), print_plots, data.frame("time" = 1:nrow(df_gen_characteristic), "energy" = df_gen_characteristic$sunny))
-# 
-# df_local_time_characteristic = merge(df_local_time_characteristic, df_gen_characteristic[, c("month", "week", "hour", "sunny")], by = c("month", "week", "hour"))
-# 
-# df_cons_characteristic = merge(df_cons_characteristic, df_gen_characteristic[, c("month", "week", "hour", "sunny")], by = c("month", "week", "hour"))
-# 
-# checking instance: plots characteristic electricity consumed vs time (of cons_to_plot) 
-plot_energy_time(name = paste0("consumption_characteristic_sunny_(version",version,")"), print_plots, data.frame("time" = 1:nrow(df_cons_characteristic), "energy" = df_cons_characteristic$sunny[cons_to_plot]))
-
 ############ 7) OUTPUT ############ 
 
-
+#### 7.1) merge info #### 
+df_local_time_characteristic = create_local_time_characteristic(number_selected_year = unique(year(selected_year_consumption)))
 df_characteristic = merge(df_local_time_characteristic, df_gen_characteristic, by = c("month", "week", "hour"))
 df_characteristic = merge(df_characteristic, df_cons_characteristic, by = c("month", "week", "hour"))
 
-# add: df_instal_cost, df_purchase_price
+# TODO: add: df_instal_cost, df_purchase_price
 
-
-#### 7.1) save #### 
+#### 7.2) save #### 
 save(df_characteristic,   
      file = paste0("workspace/workspace1_(version",version,").RData"))
-
-# save(df_local_time_gen, df_gen, df_gen_characteristic, df_local_time_characteristic, df_gen_characteristic_sunny, df_instal_cost, df_cons, df_cons_characteristic, df_cons_characteristic_sunny, df_purchase_price, df_purchase_price_sunny, 
-     # file = paste0("workspace/workspace1_(version",version,").RData"))
 
 

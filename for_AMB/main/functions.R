@@ -1,19 +1,23 @@
 ############################# data reading #############################
 
-import_data_generation <- function(filename_gen, time_format){
+import_data_generation <- function(filename_gen, selected_year_generation, time_format){
   df_gen <- read.csv(file = filename_gen, header = TRUE)
   colnames(df_gen) <- c("time", "energy")
   df_gen$time <- as.POSIXct(as.character(df_gen$time), format = time_format, tz = "Europe/Madrid") 
   df_gen$energy <- as.numeric(df_gen$energy)
 
-  # raw <- as.POSIXct(strptime(
-  #   df_gen$time,
-  #   format = "%Y%m%d:%H%M", 
-  #   tz ="Europe/Madrid"),
-  #   tz = "Europe/Madrid")
-  
-  
+  df_gen = df_gen[as.Date(df_gen$time) %in% as.Date(selected_year_generation), ]
+
   return(df_gen)
+}
+
+
+import_data_consumption <- function(filename_cons, selected_year_consumption, time_format){
+  df_cons = read.csv(file = filename_cons, header = TRUE)
+  colnames(df_cons)[1] = "time" 
+  df_cons$time <- as.POSIXct(as.character(df_cons$time), format = time_format, tz = "Europe/Madrid") 
+  df_cons = df_cons[as.Date(df_cons$time) %in% as.Date(selected_year_consumption), ]
+  return(df_cons) 
 }
 
 
@@ -30,13 +34,6 @@ import_data_inergy <- function(filename_1){
   colnames(df) <- c("id", "tariff", "time", "energy")
   df$time <- as.POSIXct(as.character(df$time), format = "%d/%m/%Y %H:%M", tz = "Europe/Madrid") 
   return(df)
-}
-
-
-import_data_consumption <- function(filename, selected_year_consumption){
-
-  meter = read.csv(file = filename, header = TRUE)
-  return(meter) 
 }
 
 
@@ -57,8 +54,11 @@ import_data_investment <- function(filename_investments){
 }
 
   
-select_data_consumption <- function(meter){  
+clean_specific_data_consumption <- function(need_cleaning = F, meter = 0){  
   
+  if (need_cleaning == F) {
+    return(meter)
+  } else{
   # filename = "/home/florencia/Nextcloud/Flor/proyects/EKATE/building-data-genome-project-2/data/meters/cleaned/electricity_cleaned.csv"
   # meter = read.csv(file = filename, header = TRUE)
   meter = meter[, c(1, grep(pattern = "public|office|education", x = colnames(meter)))]
@@ -93,6 +93,7 @@ select_data_consumption <- function(meter){
   # df_cons_sunny_desordered = df_cons_sunny[, number_order]
   
   return(meter)
+  }
 }
 
 
@@ -185,12 +186,15 @@ cut_sunny<- function(df_local_time_gen, df_gen){
 }
 
 
-create_local_time_characteristic <- function(){
-  df_local_time = data.frame("month" = c(rep(1, 48),rep(2, 48),rep(3, 48),rep(4, 48),
-                                         rep(5, 48),rep(6, 48),rep(7, 48),rep(8, 48),
-                                         rep(9, 48),rep(10, 48),rep(11, 48),rep(12, 48)),
-                             "date" = rep(c(rep(1, 24), rep(2, 24)), 12),
-                             "hour" = rep(rep(0:23), 24))
+create_local_time_characteristic <- function(number_selected_year){
+  df_calendar = data.frame("month" = sort(rep(c(1:12), 24*2)),
+                           "week" = rep(c(rep(F, 24), rep(T, 24)), 12),
+                           "hour" = rep(rep(0:23), 24))
+  
+  df_months_stats = calculate_months_stats(number_selected_year)
+  df_local_time = merge(x = df_calendar, y = df_months_stats, by = c("month", "week","hour"))
+  df_local_time[order(df_local_time$month), ]
+  
   return(df_local_time)
 }
 
@@ -212,10 +216,10 @@ select_n_users <- function(df_cons_characteristic_filtered, n_users){
 ############################# operative #############################
 
 
-order_consumers <- function(df_cons_characteristic_sunny){
+order_consumers <- function(df_cons_characteristic_sunny, df_gen_characteristic_sunny){
   self_consumption_per_user = c()
   
-  for (i in 1:ncol(df_cons_characteristic)) {
+  for (i in 1:ncol(df_cons_characteristic_sunny)) {
     df_cons_characteristic_sunny_i = df_cons_characteristic_sunny[, i]
     self_consumption_no_limits = df_gen_characteristic_sunny/df_cons_characteristic_sunny_i
     self_consumption = ifelse(self_consumption_no_limits > 1, 1, self_consumption_no_limits)
@@ -967,6 +971,18 @@ calculate_matrix_coefficient_4_one_year <- function (df_local_time, df_cons_sele
 }
 
 
+complete_consumption <- function(df_cons_characteristic_sunny, n_binary_rep){
+  needed_ncol_cons = 2^n_binary_rep
+  if ( ncol(df_cons_characteristic_sunny)>= needed_ncol_cons ) {
+    return(df_cons_characteristic_sunny) 
+  } else {
+    df_cons_characteristic_sunny[, (ncol(df_cons_characteristic_sunny)+1):needed_ncol_cons] = 0
+    colnames(df_cons_characteristic_sunny) = paste0("cons_",1:needed_ncol_cons)
+    return(df_cons_characteristic_sunny) 
+  }
+}
+
+
 ############################# fitness #############################
 
 
@@ -976,10 +992,13 @@ fitness_1_betas <- function(x, n_community, n_binary_rep, df_gen_to_optimize, df
   # x = rep(0, n_binary_rep*n_community)
   # x = rep(1, n_binary_rep*n_community)
   # x = x_solution[1, ]
+  # x = round(runif(nBits, 0, 1))
   
   combination = calculate_combination_for_GA_binary(x, n_community = n_community, n_binary_rep = n_binary_rep, df_cons = df_cons_to_optimize)
-  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
   
+  # TODO: should change this SUM by a WEIGHTED SUM 
+  surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize), na.rm = T)
+
   # surplus = sum(calculate_surplus_hourly_community(combination = combination, df_gen = df_gen_to_optimize, df_cons = df_cons_to_optimize))
   score <- surplus
   
@@ -2930,6 +2949,237 @@ plot_disaggregated_community_betas_year_area_facets <- function(name, df_gen_ass
 }
 
 
+plot_disaggregated_community_betas_year_area_facets_2 <- function(name, df_gen_assigned, df_cons_selected_users, df_cons_selected_users_sunny, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  # df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot1 <- data.frame("time" = df_local_time$time,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  
+  df_plot1 = melt(df_plot1, id.vars = "time")
+  
+  p1 <- ggplot() +
+    geom_area(aes(x = df_plot1[, "time"], y = df_plot1[, "value"], fill = df_plot1[,"variable"]), alpha = 0.5) +
+    grids() +
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
+  
+  ####################### 
+  
+  df_plot2 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot2$month_date = paste0(df_plot2$month,"_",df_plot2$date)
+  df_plot2 = df_plot2[, c(-1, -2)]
+  df_plot2 = melt(df_plot2, id.vars = c("month_date", "hour"))
+  
+  p2 <- ggplot(df_plot2, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    # geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(month_date ~ ., scales = "free", switch = "y")  
+  # labs(x = "", y = "", fill = "Solar Assignment") +
+  # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+  # scale_y_continuous(position = "right") +
+  # theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  # ggsave(filename = paste0("graphs/general_comparison",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 9)
+  
+  ####################### 
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot3 = df_plot3[df_plot3$date == 1, ]
+  df_plot3 = df_plot3[, c(-2)]
+  df_plot3 = melt(df_plot3, id.vars = c("hour", "month"))
+  
+  df_plot3$month = as.factor(df_plot3$month)
+  levels(df_plot3$month) = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec") 
+  levels(df_plot3$variable) = c("Solar Excedent", "Solar Consumption", "Grid Consumption")
+  
+  p3 <- ggplot(df_plot3, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    facet_grid(month ~ .) + #, scales = "free") +   
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "") +
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom")
+  ggsave(filename = paste0("graphs/community",name,".pdf"), plot = p3, device = "pdf", width = 8, height = 10)
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  return()
+}
+
+
+plot_disaggregated_community_betas_year_area_facets_3 <- function(name, df_gen_assigned, df_cons_selected_users, df_cons_selected_users_sunny, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  # df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot1 <- data.frame("time" = df_local_time$time,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  
+  df_plot1 = melt(df_plot1, id.vars = "time")
+  
+  p1 <- ggplot() +
+    geom_area(aes(x = df_plot1[, "time"], y = df_plot1[, "value"], fill = df_plot1[,"variable"]), alpha = 0.5) +
+    grids() +
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
+  
+  ####################### 
+  
+  df_plot2 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot2$month_date = paste0(df_plot2$month,"_",df_plot2$date)
+  df_plot2 = df_plot2[, c(-1, -2)]
+  df_plot2 = melt(df_plot2, id.vars = c("month_date", "hour"))
+  
+  p2 <- ggplot(df_plot2, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    # geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(month_date ~ ., scales = "free", switch = "y")  
+  # labs(x = "", y = "", fill = "Solar Assignment") +
+  # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+  # scale_y_continuous(position = "right") +
+  # theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  # ggsave(filename = paste0("graphs/general_comparison",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 9)
+  
+  ####################### 
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot3 = df_plot3[, c(-2)]
+  df_plot3 = melt(df_plot3, id.vars = c("hour", "month"))
+  
+  df_plot3$month = as.factor(df_plot3$month)
+  levels(df_plot3$month) = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec") 
+  levels(df_plot3$variable) = c("Solar Excedent", "Solar Consumption", "Grid Consumption")
+  
+  p3 <- ggplot(df_plot3, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    facet_grid(month ~ .) + #, scales = "free") +   
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "") +
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom")
+  ggsave(filename = paste0("graphs/community",name,".pdf"), plot = p3, device = "pdf", width = 8, height = 10)
+  
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  return()
+}
+
+
 plot_disaggregated_community_betas_year_area_mean <- function(name, df_gen_assigned, df_cons_selected_users, df_local_time){
   
   df_local_time$time = 1:nrow(df_local_time)
@@ -3031,13 +3281,259 @@ plot_disaggregated_community_betas_year_area_mean <- function(name, df_gen_assig
   
   p3 <- ggplot(df_plot3_mean, aes(x = hour, y = value, fill = variable)) +
     geom_area(alpha = 0.5) + 
-    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficieny = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficiency = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
     # scale_y_continuous(position = "right") +
     theme(text = element_text(size=14), legend.position="bottom") 
     # + ylim(0, 18)
 
   ggsave(filename = paste0("graphs/community_mean",name,".pdf"), plot = p3, device = "pdf", width = 6, height = 8)
 
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  return()
+}
+
+
+plot_disaggregated_community_betas_year_area_mean_2 <- function(name, df_gen_assigned, df_cons_selected_users, df_cons_selected_users_sunny, df_local_time){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  # df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot1 <- data.frame("time" = df_local_time$time,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  
+  df_plot1 = melt(df_plot1, id.vars = "time")
+  
+  p1 <- ggplot() +
+    geom_area(aes(x = df_plot1[, "time"], y = df_plot1[, "value"], fill = df_plot1[,"variable"]), alpha = 0.5) +
+    grids() +
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
+  # ggsave(filename = paste0("graphs/community_mean_p1",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 9)
+  
+  
+  ####################### 
+  
+  df_plot2 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot2$month_date = paste0(df_plot2$month,"_",df_plot2$date)
+  df_plot2 = df_plot2[, c(-1, -2)]
+  df_plot2 = melt(df_plot2, id.vars = c("month_date", "hour"))
+  
+  p2 <- ggplot(df_plot2, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    # geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(month_date ~ ., scales = "free", switch = "y")  
+  # labs(x = "", y = "", fill = "Solar Assignment") +
+  # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+  # scale_y_continuous(position = "right") +
+  # theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  # ggsave(filename = paste0("graphs/community_mean_p2",name,".pdf"), plot = p2, device = "pdf", width = 8, height = 9)
+  
+  ####################### 
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot3 = df_plot3[df_plot3$date == 1, ]
+  
+  df_plot3_mean_agg = aggregate(x = df_plot3, by = list(df_plot3$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  df_plot3_mean_agg = df_plot3_mean_agg[, c(-1, -2, -3)]
+  df_plot3_mean = melt(df_plot3_mean_agg, id.vars = "hour")
+  
+  levels(df_plot3_mean$variable) = c("Solar Excedent", "Solar Consumption", "Grid Consumption")
+  
+  self_sufficiency = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Solar_surplus) ) 
+  
+  p3 <- ggplot(df_plot3_mean, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) + 
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficiency = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom") 
+  # + ylim(0, 18)
+  
+  ggsave(filename = paste0("graphs/community_mean_",name,".pdf"), plot = p3, device = "pdf", width = 6, height = 8)
+  
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  # TODO: understand which of the 2 is the correct one
+  # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, user+1])
+  # self_consumption_percentage_mean_1 = mean(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_max = max(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"] / rowSums(df_cons_selected_mean[, 2:(n_community+1)]))
+  # self_consumption_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "Solar_consumption"), "value"]) / sum(df_cons_selected_mean[, 2:(n_community+1)])
+  # surplus_percentage_mean = sum(df_plot[grep(x = df_plot$variable, pattern = "surplus"), "value"]) / sum(df_gen_assigned_mean[, 2:(n_community+1)])  
+  
+  return()
+}
+
+
+CLEAN_plot_disaggregated_community_betas_year_area_mean_2 <- function(name, df_characteristic_selected_allocated){
+  
+  df_local_time$time = 1:nrow(df_local_time)
+  
+  # df_cons_selected_users_sunny = df_cons_selected_users[df_local_time$sunny, ]
+  colnames(df_gen_assigned) = colnames(df_cons_selected_users)
+  
+  # calculate solar consumption and surplus
+  df_solar_consumption = calculate_solar_consumption(df_gen_assigned = df_gen_assigned, df_cons_selected = df_cons_selected_users_sunny)
+  
+  solar_surplus <- df_gen_assigned - df_cons_selected_users_sunny
+  solar_surplus[solar_surplus < 0] = 0
+  
+  grid = df_cons_selected_users_sunny - df_gen_assigned
+  grid[grid < 0] = 0
+  
+  ## add hour column
+  df_solar_consumption$time = df_local_time$time[df_local_time$sunny]
+  solar_surplus$time = df_local_time$time[df_local_time$sunny]
+  grid$time = df_local_time$time[df_local_time$sunny]
+  df_cons_selected_users$time = df_local_time$time
+  
+  grid = rbind(grid, df_cons_selected_users[!(df_cons_selected_users$time %in% grid$time),])
+  
+  df_aux = df_cons_selected_users[!(df_cons_selected_users$time %in% df_solar_consumption$time),] 
+  df_aux[,-ncol(df_aux)] = 0
+  
+  df_solar_consumption = rbind(df_solar_consumption, df_aux)
+  solar_surplus = rbind(solar_surplus, df_aux)
+  
+  solar_surplus = solar_surplus[order(solar_surplus$time), ]
+  df_solar_consumption = df_solar_consumption[order(df_solar_consumption$time), ]
+  grid = grid[order(grid$time), ]
+  
+  solar_surplus = as.numeric(rowSums(solar_surplus[, 1:(ncol(solar_surplus)-1)]))
+  df_solar_consumption = as.numeric(rowSums(df_solar_consumption[, 1:(ncol(df_solar_consumption)-1)]))
+  grid = as.numeric(rowSums(grid[, 1:(ncol(grid)-1)]))
+  
+  n_community = ncol(df_gen_assigned)
+  
+  df_plot1 <- data.frame("time" = df_local_time$time,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  
+  df_plot1 = melt(df_plot1, id.vars = "time")
+  
+  p1 <- ggplot() +
+    geom_area(aes(x = df_plot1[, "time"], y = df_plot1[, "value"], fill = df_plot1[,"variable"]), alpha = 0.5) +
+    grids() +
+    labs(x = "Time [h]", y = "Energy [kWh]", fill = "Type") 
+  # ggsave(filename = paste0("graphs/community_mean_p1",name,".pdf"), plot = p1, device = "pdf", width = 8, height = 9)
+  
+  
+  ####################### 
+  
+  df_plot2 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot2$month_date = paste0(df_plot2$month,"_",df_plot2$date)
+  df_plot2 = df_plot2[, c(-1, -2)]
+  df_plot2 = melt(df_plot2, id.vars = c("month_date", "hour"))
+  
+  p2 <- ggplot(df_plot2, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) +
+    # geom_bar(alpha = 0.5, stat = "identity") + 
+    facet_grid(month_date ~ ., scales = "free", switch = "y")  
+  # labs(x = "", y = "", fill = "Solar Assignment") +
+  # geom_text(aes(label = round(value, digits = 1)), position=position_dodge(width=0.9), vjust=0.5) + 
+  # scale_y_continuous(position = "right") +
+  # theme(text = element_text(size=14), legend.position="bottom", axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  # ggsave(filename = paste0("graphs/community_mean_p2",name,".pdf"), plot = p2, device = "pdf", width = 8, height = 9)
+  
+  ####################### 
+  
+  df_plot3 <- data.frame("month" = df_local_time$month,
+                         "date" = df_local_time$week,
+                         "hour" = df_local_time$hour,
+                         "Solar_surplus" = solar_surplus,
+                         "Solar_consumption" = df_solar_consumption,
+                         "Grid_consumption" = grid
+  )
+  
+  df_plot3 = df_plot3[df_plot3$date == 1, ]
+  
+  df_plot3_mean_agg = aggregate(x = df_plot3, by = list(df_plot3$hour), FUN = function(x){return(mean(x, na.rm = T))})
+  df_plot3_mean_agg = df_plot3_mean_agg[, c(-1, -2, -3)]
+  df_plot3_mean = melt(df_plot3_mean_agg, id.vars = "hour")
+  
+  levels(df_plot3_mean$variable) = c("Solar Excedent", "Solar Consumption", "Grid Consumption")
+  
+  self_sufficiency = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
+  solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Solar_surplus) ) 
+  
+  p3 <- ggplot(df_plot3_mean, aes(x = hour, y = value, fill = variable)) +
+    geom_area(alpha = 0.5) + 
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficiency = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
+    # scale_y_continuous(position = "right") +
+    theme(text = element_text(size=14), legend.position="bottom") 
+  # + ylim(0, 18)
+  
+  ggsave(filename = paste0("graphs/community_mean_",name,".pdf"), plot = p3, device = "pdf", width = 6, height = 8)
+  
   solar_self_consumption = sum(df_plot3_mean_agg$Solar_consumption) / ( sum(df_plot3_mean_agg$Solar_consumption) + sum(df_plot3_mean_agg$Grid_consumption) ) 
   # TODO: understand which of the 2 is the correct one
   # self_consumption_percentage_mean_1 = mean( df_plot[grep(x = df_plot$variable, pattern = "solar_consumption"), "value"] / df_cons_selected_mean[, user+1]) 
@@ -3112,7 +3608,7 @@ plot_disaggregated_community_betas_year_area_mean_final <- function(name, df_gen
   
   p3 <- ggplot(df_plot3_mean, aes(x = hour, y = value, fill = variable)) +
     geom_area(alpha = 0.5) + 
-    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficieny = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
+    labs(x = "Time [h]", y = "Energy [kWh]", "title" = paste0("Self-consumption = ", (round(solar_self_consumption, digits = 2)*100),"% & Self-sufficiency = ", (round(self_sufficiency, digits = 2)*100),"%"), fill = "") +
     # scale_y_continuous(position = "right") +
     theme(text = element_text(size=14), legend.position="bottom") +
     ylim(0, 18)
@@ -3878,6 +4374,63 @@ plot_comparison_payback <- function(name, comparison){
 }
 
 
+plot_energy_time_week <- function(name, print_plots, binary_week = T, df_cons_characteristic, cons_to_plot){
+  
+  if (print_plots == T) {
+    df_cons_characteristic_week = df_cons_characteristic[df_cons_characteristic$week == binary_week, c("month", "hour", cons_to_plot)]
+    
+    df_plot = df_cons_characteristic_week
+    df_plot = melt(df_plot, id.vars = c("hour", "month"))
+    
+    df_plot$month = as.factor(df_plot$month)
+    levels(df_plot$month) = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec") 
+    
+    p3 <- ggplot(df_plot, aes(x = hour, y = value)) +
+      geom_line() +
+      facet_grid(month ~ .) + #, scales = "free") +   
+      labs(x = "Time [h]", y = "Energy [kWh]", fill = "") +
+      # scale_y_continuous(position = "right") +
+      theme(text = element_text(size=14), legend.position="bottom")
+    ggsave(filename = paste0("graphs/energy_time_",name,".pdf"), plot = p3, device = "pdf", width = 8, height = 10)
+    return()  
+  } else{
+    return()  
+  }
+}
+
+
+plot_energy_time_week_selected <- function(name, print_plots, df_cons_characteristic){
+  
+  if (print_plots == T) {
+    y_end = max(df_characteristic_selected[grep("cons", colnames(df_characteristic))], na.rm = T)
+    for (cons_to_plot in colnames(df_characteristic)[grep("cons", colnames(df_characteristic))]) {
+      for (binary_week in c(T, F)) {
+        df_cons_characteristic_week = df_cons_characteristic[df_cons_characteristic$week == binary_week, c("month", "hour", cons_to_plot)]
+        
+        df_plot = df_cons_characteristic_week
+        df_plot = melt(df_plot, id.vars = c("hour", "month"))
+        
+        df_plot$month = as.factor(df_plot$month)
+        levels(df_plot$month) = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec") 
+        
+        p3 <- ggplot(df_plot, aes(x = hour, y = value)) +
+          geom_line() +
+          facet_grid(month ~ .) + #, scales = "free") +   
+          labs(x = "Time [h]", y = "Energy [kWh]", fill = "") +
+          # scale_y_continuous(position = "right") +
+          ylim(0,y_end) + 
+          theme(text = element_text(size=14), legend.position="bottom")
+        ggsave(filename = paste0("graphs/energy_time_",cons_to_plot,name,binary_week,".pdf"), plot = p3, device = "pdf", width = 8, height = 10)
+      }
+    }
+    return()  
+
+  } else{
+    return()  
+  }
+}
+
+
 ############################# AUX - main #############################
 
 
@@ -3908,8 +4461,8 @@ calculate_n_community <- function(community_objective = "novel", generation, con
   
   # n_community_max = 1 + ceiling(1/mean(colMeans(consumption[max_insolation_hours, ] / generation_smooth[max_insolation_hours])))
 
-  individual_self_sufficiency = colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours])  
-  individual_self_sufficiency_quantiles = quantile(individual_self_sufficiency)
+  individual_self_sufficiency = colMeans(consumption[max_insolation_hours, ] / generation[max_insolation_hours], na.rm = T)  
+  individual_self_sufficiency_quantiles = quantile(individual_self_sufficiency, na.rm = T)
 
   # the stat we choose depends on our objective
 
@@ -3933,11 +4486,18 @@ calculate_n_community <- function(community_objective = "novel", generation, con
     individual_self_sufficiency_stat = as.numeric(individual_self_sufficiency_quantiles[3])
     n_community = 1/individual_self_sufficiency_stat
     n_community = round(n_community) 
+    } else {
+    print("Error --- misspelled")
+    n_community = 0 
   }
 
   # hist(individual_self_sufficiency)
   # mean(individual_self_sufficiency)
-
+  
+  if (n_community>ncol(consumption)) {
+    print(paste("Warning --- optimal n_community =",n_community))
+    n_community = ncol(consumption)
+  }
   return(n_community)
 }
 
@@ -4024,21 +4584,118 @@ calculate_characteristic_days <- function(df, number_selected_year){
 }
 
 
+calculate_characteristic_days_2 <- function(df, number_selected_year){
+  
+  colnames(df) = c("time", "energy")
+  df_characteristic = list()
+  for (m in 1:12) {
+    
+    # m = 1
+    if (m < 11) {
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
+    }else{
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year+1),"-",1,"-01")), by = "day")      
+    }
+    
+    days_month = days_month[-length(days_month)]
+    
+    days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
+    days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
+    ##
+    
+    df_mean_1 = data.frame("week" = T, "hour" = 0:23, "energy" = NA)
+    
+    df_month_week = df[as.Date(df$time) %in% days_month_week, ]
+    df_month_week_clean = df_month_week[!is.na(df_month_week$energy), ]
+    
+    ##
+    
+    df_mean_2 = data.frame("week" = F, "hour" = 0:23, "energy" = NA)
+    
+    df_month_end_week = df[as.Date(df$time) %in% days_month_end_week, ]
+    df_month_end_week_clean = df_month_end_week[!is.na(df_month_end_week$energy), ]
+
+    if((any(!(0:23 %in% unique(hour(df_month_week_clean$time))))) | (any(!(0:23 %in% unique(hour(df_month_end_week_clean$time)))))){
+      
+      df_characteristic[[m]] = rbind(df_mean_1, df_mean_2)
+
+    }else{
+      
+      df_mean_incomplete = aggregate(df_month_week_clean$energy, by = list(hour(df_month_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_1[df_mean_1$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_week = df_mean_1
+      
+      ##
+      
+      df_mean_incomplete = aggregate(df_month_end_week_clean$energy, by = list(hour(df_month_end_week_clean$time)), FUN = mean)
+      colnames(df_mean_incomplete) = c("hour", "energy")
+      
+      df_mean_2[df_mean_2$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
+      df_mean_end_week = df_mean_2
+      
+      df_characteristic[[m]] = rbind(df_mean_end_week, df_mean_week)
+    }
+  }
+  
+  return(df_characteristic)
+}
+
+
+calculate_months_stats <- function(number_selected_year){
+  
+  list_months_stats = list()
+  for (m in 1:12) {
+    
+    # m = 1
+    if (m < 11) {
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year),"-",m+1,"-01")), by = "day")    
+    }else{
+      days_month = seq(from = as.Date(paste0(as.character(number_selected_year),"-",m,"-01")), to = as.Date(paste0(as.character(number_selected_year+1),"-",1,"-01")), by = "day")      
+    }
+    
+    days_month = days_month[-length(days_month)]
+    
+    days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
+    n_days_month_week = length(days_month_week)
+    days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
+    n_days_month_end_week = length(days_month_end_week)
+    ##
+    
+    df_week = data.frame("hour" = 0:23, "n_days" = n_days_month_week, "week" = T)
+    df_end_week = data.frame("hour" = 0:23, "n_days" = n_days_month_end_week, "week" = F)
+
+    list_months_stats[[m]] = rbind(df_week, df_end_week)
+  }
+  
+  df_months_stats = dplyr::bind_rows(list_months_stats, .id = "month")
+  
+  return(df_months_stats)
+}
+
+
 calculate_characteristic_days_cons <- function(df, number_selected_year){
-  df_characteristic = data.frame("time_int"=sort(rep(c(1:12), 24*2)))
+
+  df_characteristic = data.frame("month" = sort(rep(c(1:12), 24*2)),
+                           "week" = rep(c(rep(F, 24), rep(T, 24)), 12),
+                           "hour" = rep(rep(0:23), 24))
   
   for (i in 2:ncol(df)) {
     # print(i)
-    list_meter_characteristic = calculate_characteristic_days(df = df[, c(1, i)], number_selected_year = unique(year(selected_year_consumption)))  
+    list_meter_characteristic = calculate_characteristic_days_2(df = df[, c(1, i)], number_selected_year)  
     # will discard the users that have any month without characteristic data
-    if (any(is.na(list_meter_characteristic))) {
-      # print("no")
-    } else{
-      df_characteristic_i = dplyr::bind_rows(list_meter_characteristic, .id = "column_label")
-      df_characteristic = cbind(df_characteristic, df_characteristic_i[, 3])
+    # if (any(is.na(list_meter_characteristic))) {
+    #   # print("no")
+    # } else{
+      df_characteristic_i = dplyr::bind_rows(list_meter_characteristic, .id = "month")
+      df_characteristic = merge(df_characteristic, df_characteristic_i, by = c("month", "week", "hour"))
       colnames(df_characteristic)[ncol(df_characteristic)] = paste0("cons_",ncol(df_characteristic)-1)
-    }
+    # }
   } 
+  
+  colnames(df_characteristic)[4:ncol(df_characteristic)] = colnames(df)[2:ncol(df)]
+  
   return(df_characteristic)
 }
 
@@ -4058,12 +4715,9 @@ calculate_characteristic_days_gen <- function(df, number_selected_year){
     
     days_month = days_month[-length(days_month)]
     
-    days_month_week = days_month[weekdays(days_month, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")]
-    days_month_end_week = days_month[weekdays(days_month, abbreviate = T) %in% c("sáb", "dom")]
-    
     ##
     
-    df_mean = data.frame("hour" = 0:23, "energy" = 0)
+    df_mean = data.frame("week" = T, "hour" = 0:23, "energy" = NA)
     
     df_month = df[as.Date(df$time) %in% days_month, ]
     df_month_clean = df_month[!is.na(df_month$energy), ]
@@ -4081,14 +4735,16 @@ calculate_characteristic_days_gen <- function(df, number_selected_year){
       df_mean[df_mean$hour %in% df_mean_incomplete$hour, "energy"] = df_mean_incomplete$energy
       df_mean = df_mean
       
-      df_characteristic[[m]] = rbind(df_mean, df_mean)
+      df_mean_end_week = df_mean
+      df_mean_end_week$week = F
+      
+      df_characteristic[[m]] = rbind(df_mean_end_week, df_mean)
     }
   }
   
   df_characteristic = dplyr::bind_rows(df_characteristic, .id = "column_label")
-  # colnames(df_characteristic)[1] = "month"
-  df_characteristic = df_characteristic$energy
-  
+  colnames(df_characteristic)[1] = "month"
+
   return(df_characteristic)
 }
 
@@ -4840,7 +5496,7 @@ calculate_allocation_coefficients <- function(community_objective = "novel", df_
   
   matrix_coefficients = matrix(0, nrow = length(df_gen_sunny), ncol = n_community)
   
-  if (community_objective == "none??"){
+  if (community_objective == "none"){
     matrix_coefficients[,] = 1/n_community
     
   } else if (community_objective == "profitable"){
@@ -4853,6 +5509,14 @@ calculate_allocation_coefficients <- function(community_objective = "novel", df_
     optimum_coefficients = df_cons_selected_sunny/df_gen_assigned_sunny
     optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
     matrix_coefficients = as.matrix(optimum_coefficients)
+
+  } else if (community_objective == "constant_environmental"){
+    df_gen_assigned_sunny <- calculate_gen_assigned(df_gen_sunny, combination = rep(1, n_community))
+    optimum_coefficients = df_cons_selected_sunny/df_gen_assigned_sunny
+    optimum_coefficients = optimum_coefficients/rowSums(optimum_coefficients, na.rm = T)
+    optimum_coefficients_mean = colMeans(optimum_coefficients, na.rm = T)
+    matrix_coefficients = as.matrix(optimum_coefficients_mean)
+    matrix_coefficients = matrix(1, nrow = nrow(df_gen_assigned_sunny)) %*% t(matrix_coefficients)
     
   } else if (community_objective == "novel"){
     matrix_coefficients = calculate_matrix_coefficient_4(df_local_time = df_local_time, df_cons_selected_sunny = df_cons_selected_sunny, df_gen_sunny = df_gen_sunny, 

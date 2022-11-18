@@ -5,7 +5,7 @@
 ### set working directory & version ####
 rm(list = ls())
 setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_inergy/main")
-version = 8
+version = 3
 
 ### 1.1) for plots ####
 print_plots = T
@@ -118,42 +118,11 @@ payback_years = calculate_payback_betas_whole_year_all(df_characteristic_selecte
 #### ....1) select info #### 
 
 #### ....2) save #### 
-version = 8
-# save(df_characteristic_selected_allocated, processing_time, payback_years,
-#      file = paste0("workspace/workspace3_(version",version,").RData"))
-load(file = paste0("workspace/workspace3_(version",version,").RData"))
+version = 3
+save(df_characteristic_selected_allocated, processing_time, payback_years,
+     file = paste0("workspace/workspace3_(version",version,").RData"))
 
-
-### for inergy
-df_0 = df_characteristic_selected_allocated[, grepl(pattern = "alloc", colnames(df_characteristic_selected_allocated))] / df_characteristic_selected_allocated$energy
-df_0[is.na(df_0)] = 0
-
-df_1 = df_characteristic_selected_allocated[, grepl(pattern = "month|week|hour", colnames(df_characteristic_selected_allocated))]
-df_1 = cbind(df_1, df_0)
-
-filename_gen = "data/PV_generation_data.csv"
-df_2 = import_data_generation(filename_gen, selected_year_generation = F, time_format = "%Y-%m-%d %H:%M:%S")
-df_2$month = month(df_2$time)
-df_2$week = weekdays(df_2$time, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")
-df_2$hour = hour(df_2$time)
-df_2$day = day(df_2$time)
-
-df_2 = df_2[, c(3, 4, 5, 6)]
-
-df = merge(x = df_1, y = df_2, by = c("month", "week", "hour"))
-# df$hour = as.numeric(df$hour)
-
-df = df[order(df$hour), ]
-df = df[order(df$day), ]
-df = df[order(df$month), ]
-df = df[, c("month", "day", "hour", "week", "alloc_1", "alloc_2")]
-head(df)
-
-write.csv(df,paste0("output_coefficients_",version,".csv"), row.names = FALSE)
-
-solarC = colSums(df_characteristic_selected_allocated[, grepl(pattern = "solarC", x = colnames(df_characteristic_selected_allocated))])
-
-### end for inergy
+# load(file = paste0("workspace/workspace3_(version",version,").RData"))
 
 
 ### 3) plots ### 

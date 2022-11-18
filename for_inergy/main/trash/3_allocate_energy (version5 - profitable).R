@@ -5,7 +5,7 @@
 ### set working directory & version ####
 rm(list = ls())
 setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_inergy/main")
-version = 8
+version = 5
 
 ### 1.1) for plots ####
 print_plots = T
@@ -32,7 +32,7 @@ source("functions.R")
 # community_objective = "environmental"
 # community_objective = "none"
 # community_objective = "constant_environmental"
-community_objective = "novel"
+community_objective = "profitable"
 
 
 ############ 2) OPTIMIZE ############ 
@@ -46,8 +46,6 @@ processing_time = toc - tic
 #      file = paste0("workspace/matrixcoefficients_(version",version,").RData"))
 # load(file = paste0("workspace/matrixcoefficients_(version",version,").RData"))
 
-# matrix_coefficients_noplot
-# matrix_coefficients
 
 # nrow(matrix_coefficients)
 # nrow(df_characteristic_selected)
@@ -55,8 +53,9 @@ processing_time = toc - tic
 # max(matrix_coefficients)
 
 # TODO, hardcoded here:
-colnames(df_characteristic_selected)[grep("cons_", colnames(df_characteristic_selected))]
-colnames(matrix_coefficients) = paste0("coeff_",c(3, 7))
+print(colnames(df_characteristic_selected)[grep("cons_", colnames(df_characteristic_selected))])
+colnames(matrix_coefficients) = paste0("coeff_",c(2, 8))
+
 df_characteristic_selected_matrix = cbind(df_characteristic_selected, matrix_coefficients)
 
 df_plot = df_characteristic_selected_matrix[, grep("hour|coeff", colnames(df_characteristic_selected_matrix))]
@@ -71,7 +70,7 @@ df_plot = df_plot[, c(-1, -2)]
 # df_matrix_test_1 = df_characteristic_selected_matrix[(df_characteristic_selected_matrix$month == 1 & df_characteristic_selected_matrix$week == T), c("1", "2", "hour")]
 # df_matrix_test_1 = df_matrix_test_1[order(df_matrix_test_1$hour), ]
 # df_matrix_test_1 = as.matrix(df_matrix_test_1[, c(1,2)])
-plot_matrix(name = paste0("mean_",community_objective), as.matrix(df_plot))
+plot_matrix(name = paste0("mean_",community_objective), as.matrix(df_plot), version)
 
 
 ############ 2) ALLOCATE ENERGY ############ 
@@ -118,42 +117,8 @@ payback_years = calculate_payback_betas_whole_year_all(df_characteristic_selecte
 #### ....1) select info #### 
 
 #### ....2) save #### 
-version = 8
-# save(df_characteristic_selected_allocated, processing_time, payback_years,
-#      file = paste0("workspace/workspace3_(version",version,").RData"))
-load(file = paste0("workspace/workspace3_(version",version,").RData"))
-
-
-### for inergy
-df_0 = df_characteristic_selected_allocated[, grepl(pattern = "alloc", colnames(df_characteristic_selected_allocated))] / df_characteristic_selected_allocated$energy
-df_0[is.na(df_0)] = 0
-
-df_1 = df_characteristic_selected_allocated[, grepl(pattern = "month|week|hour", colnames(df_characteristic_selected_allocated))]
-df_1 = cbind(df_1, df_0)
-
-filename_gen = "data/PV_generation_data.csv"
-df_2 = import_data_generation(filename_gen, selected_year_generation = F, time_format = "%Y-%m-%d %H:%M:%S")
-df_2$month = month(df_2$time)
-df_2$week = weekdays(df_2$time, abbreviate = T) %in% c("lun", "mar", "mié", "jue", "vie")
-df_2$hour = hour(df_2$time)
-df_2$day = day(df_2$time)
-
-df_2 = df_2[, c(3, 4, 5, 6)]
-
-df = merge(x = df_1, y = df_2, by = c("month", "week", "hour"))
-# df$hour = as.numeric(df$hour)
-
-df = df[order(df$hour), ]
-df = df[order(df$day), ]
-df = df[order(df$month), ]
-df = df[, c("month", "day", "hour", "week", "alloc_1", "alloc_2")]
-head(df)
-
-write.csv(df,paste0("output_coefficients_",version,".csv"), row.names = FALSE)
-
-solarC = colSums(df_characteristic_selected_allocated[, grepl(pattern = "solarC", x = colnames(df_characteristic_selected_allocated))])
-
-### end for inergy
+save(df_characteristic_selected_allocated, processing_time, payback_years,
+     file = paste0("workspace/workspace3_(version",version,").RData"))
 
 
 ### 3) plots ### 
@@ -161,8 +126,6 @@ solarC = colSums(df_characteristic_selected_allocated[, grepl(pattern = "solarC"
 # 1) community plot
 
 # should calculate mean weighting with the n_days (now only consiering week days)
-plot_mean_allcoted_community_bis(df_characteristic_selected_allocated, week_selected = T, version)
-
 plot_mean_allcoted_community(df_characteristic_selected_allocated, week_selected = T, version)
 plot_monthly_allocated_community(df_characteristic_selected_allocated, week_selected = T, version) 
 
@@ -184,8 +147,8 @@ plot_monthly_allocated_participant(participant = 7, df_characteristic_selected_a
 
 # there are only 2 participants:
 selected_3participants = c(1, 2)
-plot_allocation_participants(df_characteristic_selected_allocated[df_characteristic_selected_allocated$week == T, ], selected_3participants, individual_investment_selected, paybacks = payback_years, version)
 
+plot_allocation_participants(df_characteristic_selected_allocated[df_characteristic_selected_allocated$week == T, ], selected_3participants, individual_investment_selected, paybacks = payback_years, version)
 
 # community stats:
 surplus = sum(df_characteristic_selected_allocated[, grepl("surplus",colnames(df_characteristic_selected_allocated))])
@@ -193,12 +156,12 @@ avoided_emissions = calculate_avoided_emissions(df_characteristic_selected_alloc
 
 self_sufficiency_community_mean = calculate_self_sufficiency_community_mean(df_characteristic_selected_allocated)
 individual_self_sufficiency = calculate_self_sufficiency_individual(df_characteristic_selected_allocated)
-self_sufficiency = mean(individual_self_sufficiency)
+self_sufficiency = mean(self_sufficiency_individual)
 
 
 self_consumption_community_mean = calculate_self_consumption_community_mean(df_characteristic_selected_allocated)
 individual_self_consumption = calculate_self_consumption_individual(df_characteristic_selected_allocated)
-self_consumption = mean(individual_self_consumption)
+self_consumption = mean(self_consumption_individual)
 
 
 max_payback = max(payback_years)
@@ -209,7 +172,10 @@ diff_max_min_payback = max_payback - min_payback
 # individual:
 individual_surplus = colSums(df_characteristic_selected_allocated[, grepl("surplus",colnames(df_characteristic_selected_allocated))])
 individual_avoided_emissions = calculate_avoided_emissions_individual(df_characteristic_selected_allocated)
-individual_paybacks = payback_years
+individual_investment_selected 
+individual_paybacks_years = paybacks_years
+self_sufficiency_individual
+self_consumption_individual
 
 save(surplus, 
      avoided_emissions, 
@@ -222,9 +188,9 @@ save(surplus,
      individual_surplus, 
      individual_avoided_emissions, 
      individual_investment_selected, 
-     individual_paybacks, 
-     individual_self_sufficiency, 
-     individual_self_consumption,
+     individual_paybacks_years, 
+     self_sufficiency_individual, 
+     self_consumption_individual,
      file = paste0("workspace/stats3_(version",version,").RData"))
 
 

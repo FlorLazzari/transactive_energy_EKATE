@@ -31,7 +31,7 @@
 ### set working directory & version ####
 rm(list = ls())
 setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_inergy/main")
-version = 8
+version = 7
 
 ### 1.1) for plots ####
 print_plots = T
@@ -56,6 +56,7 @@ community_objective = "novel"
 #### 2.1) estimate number of participants #### 
 # to improve the results check the hist(individual_self_sufficiency) inside the function
 n_community = calculate_n_community(community_objective, generation = gen_sunny, consumption = cons_sunny)
+n_community = 8
 # FOR THIS CASE: the warning is advising us that the most probable is that the result of the optimization will be to select all the consumers (but remember this is an estimation)
 
 #### 2.2) calculate lenght of binary representation needed #### 
@@ -77,32 +78,19 @@ best_combinations = optimize_combination(n_community, n_binary_rep, df_gen_to_op
 # important! reducing the population size reduced a lot the computation time
 # combination = best_combinations[1, ]
 combination = colSums(best_combinations)
-# version 3
-combination = ifelse(combination>2, 1, 0)
 
-# TODO: include all the combinations
-df_cons_characteristic_sunny_ordered[, combination] = 0
-best_combinations_cut = optimize_combination(n_community, n_binary_rep, df_gen_to_optimize = gen_sunny, df_cons_to_optimize = df_cons_characteristic_sunny_ordered, weights_n_days)
 
+combination = c(1, 1, 1, 1, 1, 1, 1, 1)
+# combination[c(1, 2, 3, 4, 5, 6, 7, 8)] = 1
+
+# checked! identical(best_combinations[9,], combination) 
 
 #### 4.3) combination names #### 
 names_combination = which(colnames(cons_sunny) %in% colnames(df_cons_characteristic_sunny_ordered)[which(combination == 1)]) 
 combination_aux = rep(0, times=ncol(cons_sunny))
 combination_aux[names_combination] = 1
 
-optimal_combination_1 = combination_aux
-
-
-names_combination = which(colnames(cons_sunny) %in% colnames(df_cons_characteristic_sunny_ordered)[which(best_combinations_cut == 1)]) 
-combination_aux = rep(0, times=ncol(cons_sunny))
-combination_aux[names_combination] = 1
-
-optimal_combination_2 = combination_aux
-
-# hardcoded:
-optimal_combination = c(0, 0, 1, 0, 0, 0, 1, 0)
-# participant 7 with:
-#     3 or 5
+optimal_combination = combination_aux
 
 # to check:
 # TODO: generate a plot
@@ -123,7 +111,7 @@ df_instal_cost = import_data_instal_cost(filename_instal_cost)
 individual_investment_selected = individual_investment[optimal_combination==1]
 
 individual_investment_selected = df_instal_cost * individual_investment_selected / sum(individual_investment_selected)
-  
+
 
 #### 5.2) order #### 
 # df_characteristic_selected = df_characteristic_selected[order(df_characteristic_selected$hour), ]

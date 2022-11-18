@@ -5,7 +5,7 @@
 ### set working directory & version ####
 rm(list = ls())
 setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_inergy/main")
-version = 8
+version = 7
 
 ### 1.1) for plots ####
 print_plots = T
@@ -32,7 +32,7 @@ source("functions.R")
 # community_objective = "environmental"
 # community_objective = "none"
 # community_objective = "constant_environmental"
-community_objective = "novel"
+community_objective = "environmental"
 
 
 ############ 2) OPTIMIZE ############ 
@@ -46,8 +46,6 @@ processing_time = toc - tic
 #      file = paste0("workspace/matrixcoefficients_(version",version,").RData"))
 # load(file = paste0("workspace/matrixcoefficients_(version",version,").RData"))
 
-# matrix_coefficients_noplot
-# matrix_coefficients
 
 # nrow(matrix_coefficients)
 # nrow(df_characteristic_selected)
@@ -55,8 +53,9 @@ processing_time = toc - tic
 # max(matrix_coefficients)
 
 # TODO, hardcoded here:
-colnames(df_characteristic_selected)[grep("cons_", colnames(df_characteristic_selected))]
-colnames(matrix_coefficients) = paste0("coeff_",c(3, 7))
+print(colnames(df_characteristic_selected)[grep("cons_", colnames(df_characteristic_selected))])
+colnames(matrix_coefficients) = paste0("coeff_",c(1, 2, 3, 4, 5, 6, 7, 8))
+
 df_characteristic_selected_matrix = cbind(df_characteristic_selected, matrix_coefficients)
 
 df_plot = df_characteristic_selected_matrix[, grep("hour|coeff", colnames(df_characteristic_selected_matrix))]
@@ -71,7 +70,7 @@ df_plot = df_plot[, c(-1, -2)]
 # df_matrix_test_1 = df_characteristic_selected_matrix[(df_characteristic_selected_matrix$month == 1 & df_characteristic_selected_matrix$week == T), c("1", "2", "hour")]
 # df_matrix_test_1 = df_matrix_test_1[order(df_matrix_test_1$hour), ]
 # df_matrix_test_1 = as.matrix(df_matrix_test_1[, c(1,2)])
-plot_matrix(name = paste0("mean_",community_objective), as.matrix(df_plot))
+plot_matrix(name = paste0("mean_",community_objective), as.matrix(df_plot), version)
 
 
 ############ 2) ALLOCATE ENERGY ############ 
@@ -118,7 +117,7 @@ payback_years = calculate_payback_betas_whole_year_all(df_characteristic_selecte
 #### ....1) select info #### 
 
 #### ....2) save #### 
-version = 8
+version = 7
 # save(df_characteristic_selected_allocated, processing_time, payback_years,
 #      file = paste0("workspace/workspace3_(version",version,").RData"))
 load(file = paste0("workspace/workspace3_(version",version,").RData"))
@@ -146,14 +145,16 @@ df = merge(x = df_1, y = df_2, by = c("month", "week", "hour"))
 df = df[order(df$hour), ]
 df = df[order(df$day), ]
 df = df[order(df$month), ]
-df = df[, c("month", "day", "hour", "week", "alloc_1", "alloc_2")]
+df = df[, c("month", "day", "hour", "week", "alloc_1", "alloc_2", "alloc_3", "alloc_4", "alloc_5", "alloc_6", "alloc_7", "alloc_8")]
 head(df)
 
 write.csv(df,paste0("output_coefficients_",version,".csv"), row.names = FALSE)
 
+
 solarC = colSums(df_characteristic_selected_allocated[, grepl(pattern = "solarC", x = colnames(df_characteristic_selected_allocated))])
 
 ### end for inergy
+
 
 
 ### 3) plots ### 
@@ -183,7 +184,12 @@ plot_monthly_allocated_participant(participant = 7, df_characteristic_selected_a
 
 
 # there are only 2 participants:
-selected_3participants = c(1, 2)
+mean_payback = which.min(abs(payback_years - mean(payback_years)))
+
+selected_3participants = c(as.numeric(which.min(payback_years)), 
+                           mean_payback,
+                           as.numeric(which.max(payback_years)))
+
 plot_allocation_participants(df_characteristic_selected_allocated[df_characteristic_selected_allocated$week == T, ], selected_3participants, individual_investment_selected, paybacks = payback_years, version)
 
 

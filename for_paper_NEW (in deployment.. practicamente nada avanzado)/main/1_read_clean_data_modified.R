@@ -41,8 +41,8 @@
 
 ### set working directory & version ####
 rm(list = ls())
-setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_inergy/main")
-version = 8
+setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_paper_NEW/main")
+version = 1
 
 ### 1.1) for plots ####
 print_plots = T

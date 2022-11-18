@@ -1,22 +1,47 @@
 # Process description ##########################################################
 
-# 1) REQUESTED INPUTS
+# 1) REQUESTED INPUTS 
 #   1.1) for plots 
 #   1.2) load workspace1 
-#   1.3) import libraries 
+#   1.3) import libraries
 #   1.4) community objective
+
+# 2) NUMBER OF PARTICIPANTS  
+#   2.1) estimate number of participants #### 
+#   2.2) calculate lenght of binary representation needed #### 
+
+# 3) ORDER PARTICIPANTS 
+#   3.1) order by self_consumption 
+
+# 4) OPTIMIZE 
+#   4.1) calculate weights for days  
+#   4.2) optimize the combination  
+#   4.3) combination names  
+
+# 5) OUTPUT 
+#   5.1) select info 
+#   5.2) order 
+#   5.3) save 
 
 # checking instances:
 # if (print_plots == T) => plots will be generated in the directory .../graphs
 
 ############ 1) REQUESTED INPUTS ############
 
+### set working directory & version ####
+rm(list = ls())
+setwd("~/Nextcloud/Flor/projects/EKATE/transactive_energy_EKATE/for_AMB/main")
+version = 3
+
 ### 1.1) for plots ####
 print_plots = T
-version = 2
 
 ### 1.2) load workspace1 ####
 load(file = paste0("workspace/workspace1_(version",version,").RData"))
+# los meses deberian depender del objetivo de la comunidad
+# gen_sunny = df_gen_characteristic[(df_gen_characteristic$sunny == T) & (df_gen_characteristic$month %in% c(6, 7, 8)), "energy"]
+gen_sunny = df_characteristic[(df_characteristic$sunny == T), "energy"]
+cons_sunny = df_characteristic[df_characteristic$sunny == T, grep("cons", colnames(df_characteristic))]
 
 ### 1.3) import libraries ####
 library(GA)
@@ -26,39 +51,36 @@ source("functions.R")
 # community_objective = "novel" or "environmental" or "profitable"
 community_objective = "novel"
 
+
 ############ 2) NUMBER OF PARTICIPANTS ############ 
 
 #### 2.1) estimate number of participants #### 
-
-# los meses deberian depender del objetivo de la comunidad
-# gen_sunny = df_gen_characteristic[(df_gen_characteristic$sunny == T) & (df_gen_characteristic$month %in% c(6, 7, 8)), "energy"]
-gen_sunny = df_characteristic[(df_characteristic$sunny == T), "energy"]
-cons_sunny = df_characteristic[df_characteristic$sunny == T, grep("cons", colnames(df_characteristic))]
-
 # to improve the results check the hist(individual_self_sufficiency) inside the function
 n_community = calculate_n_community(community_objective, generation = gen_sunny, consumption = cons_sunny)
 # FOR THIS CASE: the warning is advising us that the most probable is that the result of the optimization will be to select all the consumers (but remember this is an estimation)
 
-#### 2.1) calculate lenght of binary representation needed #### 
-
+#### 2.2) calculate lenght of binary representation needed #### 
 n_binary_rep = ceiling(log(ncol(cons_sunny), base=2))
 cons_sunny_complete = complete_consumption(cons_sunny, n_binary_rep)
 
 ############ 3) ORDER PARTICIPANTS ############ 
 
 #### 3.1) order by self_consumption #### 
-
 df_cons_characteristic_sunny_ordered = order_consumers(cons_sunny_complete, gen_sunny)
 
 ############ 4) OPTIMIZE ############ 
 
+#### 4.1) calculate weights for days #### 
 weights_n_days = df_characteristic$n_days[df_characteristic$sunny == T] 
 
-combination = optimize_combination(n_community, n_binary_rep, df_gen_to_optimize = gen_sunny, df_cons_to_optimize = df_cons_characteristic_sunny_ordered, weights_n_days, max_iter = 50)
+#### 4.2) optimize the combination #### 
+combination = optimize_combination(n_community, n_binary_rep, df_gen_to_optimize = gen_sunny, df_cons_to_optimize = df_cons_characteristic_sunny_ordered, weights_n_days)
+# important! reducing the population size reduced a lot the computation time
     
 # TODO: include all the combinations
 # combination = combination[1, ]
 
+#### 4.3) combination names #### 
 names_combination = which(colnames(cons_sunny) %in% colnames(df_cons_characteristic_sunny_ordered)[which(combination == 1)]) 
 combination_aux = rep(0, times=ncol(cons_sunny))
 combination_aux[names_combination] = 1
@@ -72,17 +94,18 @@ surplus = sum(weighted_surplus, na.rm = T)
 
 ############ 5) OUTPUT ############ 
 
+#### 5.1) select info #### 
 selected_cons = colnames(df_characteristic)[grep("cons", colnames(df_characteristic))][optimal_combination==1]
-
-df_characteristic_selected = df_characteristic[,c("month","week","hour","n_days","energy","sunny", selected_cons)]
-
+df_characteristic_selected = df_characteristic[,c("month","week","hour","n_days","energy","sunny", selected_cons, "price")]
 plot_energy_time_week_selected(name = paste0("consumption_characteristic_(version",version,")"), print_plots, df_characteristic_selected)
+individual_investment_selected = individual_investment[optimal_combination==1]
 
-#### 7.1) save #### 
-save(df_characteristic_selected, 
+#### 5.2) order #### 
+df_characteristic_selected = df_characteristic_selected[order(df_characteristic_selected$month), ]
+df_characteristic_selected = df_characteristic_selected[order(df_characteristic_selected$week), ]
+df_characteristic_selected = df_characteristic_selected[order(df_characteristic_selected$week), ]
+
+#### 5.3) save #### 
+save(df_characteristic_selected, individual_investment_selected,
      file = paste0("workspace/workspace2_(version",version,").RData"))
-
-
-
-
 
